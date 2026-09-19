@@ -4,6 +4,8 @@ DATABASE_URL ?= postgresql+psycopg://datalight:datalight@localhost:5433/dataligh
 export DATABASE_URL
 export DATA_PATH := $(abspath $(CSV_PATH))
 export CSV_PATH
+DATA_DIR ?= $(dir $(abspath $(CSV_PATH)))
+export DATA_DIR
 UV := uv run --project backend
 WEB := pnpm --dir apps/web
 
@@ -32,7 +34,7 @@ lint:
 	$(UV) ruff check backend scripts
 	$(WEB) lint
 typecheck:
-	$(UV) mypy backend/src/datalight
+	$(UV) mypy --config-file backend/pyproject.toml backend/src/datalight
 	$(WEB) typecheck
 test:
 	$(UV) pytest backend/tests -m 'not postgres' -q

@@ -4,13 +4,15 @@
 
 Use Python 3.12, uv, Node 24 (`.nvmrc`), and pnpm 11.19.0 (`packageManager`). Install pnpm through Corepack or your normal package manager. `make install` installs the locked Python/JS dependencies. Only esbuild's required dependency build script is enabled.
 
-`make db` starts PostgreSQL and exposes localhost:5433 through the development Compose override. `make migrate` upgrades it. Run `make api`, `make worker`, and `make web` in separate terminals; Vite proxies requests to localhost:8000. Defaults use the synthetic fixture. Override `CSV_PATH` for another source. Model settings come from ignored `.env`, while Make supplies the local database URL and data path.
+`make db` starts PostgreSQL and exposes localhost:5433 through the development Compose override. `make migrate` upgrades it. Run `make api`, `make worker`, and `make web` in separate terminals; Vite proxies requests to localhost:8000. Defaults use the synthetic fixture. Use `DATA_DIR` for a directory of selectable sources; native `make` defaults derive it from `CSV_PATH`. Model settings come from ignored `.env`, while Make supplies the local database URL and data path.
 
-For the production-like local stack, run `CSV_PATH=./tests/fixtures/demo.csv docker compose up --build -d`. The browser is localhost:8080. Run `docker compose logs --tail=100 api worker` to diagnose startup. Missing mounts fail clearly; source changes require a new analysis. `docker compose down` preserves database history. Deleting the named volume destroys all reports and reviews; it is not part of normal restart or validation.
+For the production-like local stack, run `DATA_DIR=./tests/fixtures docker compose up --build -d`. The browser is localhost:8080. Run `docker compose logs --tail=100 api worker` to diagnose startup. Missing mounts fail clearly; source changes require a new analysis. `docker compose down` preserves database history. Deleting the named volume destroys all reports and reviews; it is not part of normal restart or validation.
 
 The default Docker context is machine-specific. On this development machine, an existing ARM Lima VM can be addressed with `DOCKER_HOST=unix://$HOME/.lima/docker/sock/docker.sock`; this is optional local setup, not a repository dependency. No command changes the user's global Docker context.
 
 ## Checks
+
+Use [DATASET.md](DATASET.md) for the primary testbed's schema, run boundaries, labels, and measured characteristics when preparing or evaluating the demo. Use [architecture](architecture.md) for application behavior and source-adapter limits. The reference's aggregate ranges and known labels must not seed detector thresholds or model prompts. Keep synthetic fixtures for isolated CI checks; the ignored real-data demo can be recreated with `uv run --project backend python scripts/prepare_demo.py te_process.csv` as described in the [README](../README.md).
 
 | Command | Coverage |
 |---|---|
@@ -38,3 +40,11 @@ Add schema changes as Alembic revisions; do not edit already-shipped revisions. 
 Set `LLM_ENABLED=true`, the organizer's key, and the exact model identifier in `.env`. The default `mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4` was discovered through the supplied endpoint's `/v1/models` route; the shorter deployment slug is not its model ID. Recreate API/worker to load changed environment variables, then start a new analysis. Verify the model-call record and evidence-linked hypotheses. Do not use raw-data prompts to test access.
 
 The fake transport tests prove request shape, validation, and failure behavior; they cannot prove endpoint availability, geographic hosting, or the deployed model identifier. A provider swap changes settings, not analysis code. No automatic external retry runs for an ordinary invalid response/timeout; start a new analysis after fixing configuration. A crash with an unknown request outcome is separately recorded before a leased-job retry.
+
+## Simplification workflow
+
+Open the setup screen and submit a CSV path before expecting a report. The report leaves playback paused; tests must explicitly resume. UI review now targets one decision per monitoring batch, including OK. Historical foundation reports remain readable but should not be resumed with the new detector.
+
+For an isolated Compose test project, set `COMPOSE_PROJECT_NAME`, `WEB_PORT`, `DATA_DIR=./tests/fixtures` and `LLM_ENABLED=false`. `make test-browser` takes `BASE_URL`. The restart smoke also accepts `COMPOSE_COMMAND` (for example `docker --context lima-docker compose -p datalight-qa`) so it restarts only the intended synthetic project. Never point browser/restart tests at real observations.
+
+If a host-level `DOCKER_HOST` selects a stopped daemon, use an explicit running context for this command; do not silently change the global context. Some pnpm installations request a module purge when their store differs; local verification can use `WEB='pnpm --config.verify-deps-before-run=false --dir apps/web'` with the existing locked installation. `UV_CACHE_DIR=/tmp/datalight-uv` keeps cache writes in the sandbox.

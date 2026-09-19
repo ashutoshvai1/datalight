@@ -38,6 +38,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Source Choices */
+        get: operations["source_choices_api_v1_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sources/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Source Preview */
+        get: operations["source_preview_api_v1_sources_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Decisions */
+        get: operations["decisions_api_v1_runs__run_id__decisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/{finding_id}/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Answers */
+        get: operations["answers_api_v1_findings__finding_id__answers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trace */
+        get: operations["trace_api_v1_runs__run_id__trace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs": {
         parameters: {
             query?: never;
@@ -231,6 +316,24 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnswerView */
+        AnswerView: {
+            /** Id */
+            id: string;
+            /** Review Id */
+            review_id: string;
+            /** Status */
+            status: string;
+            /** Text */
+            text: string;
+            /** Evidence Ids */
+            evidence_ids: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** BatchView */
         BatchView: {
             /** Id */
@@ -254,6 +357,22 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** ChannelExplanation */
+        ChannelExplanation: {
+            /** Channel Id */
+            channel_id: string;
+            /** Text */
+            text: string;
+            /** Evidence Ids */
+            evidence_ids: string[];
+        };
+        /** ChannelLimit */
+        ChannelLimit: {
+            /** Minimum */
+            minimum?: number | null;
+            /** Maximum */
+            maximum?: number | null;
         };
         /** ChannelProfile */
         ChannelProfile: {
@@ -340,6 +459,60 @@ export interface components {
             /** Evidence Id */
             evidence_id: string;
         };
+        /** Coverage */
+        Coverage: {
+            /** Assessed */
+            assessed: number;
+            /** Total */
+            total: number;
+            /** Limited */
+            limited: boolean;
+            /** Message */
+            message: string;
+        };
+        /** Decision */
+        Decision: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "OK" | "Fault Suspected";
+            /** Explanation */
+            explanation: string;
+            coverage: components["schemas"]["Coverage"];
+            /** Triggers */
+            triggers: components["schemas"]["Trigger"][];
+            /** Quality Warnings */
+            quality_warnings: string[];
+            /** Forecast Errors */
+            forecast_errors?: {
+                [key: string]: components["schemas"]["ForecastError"];
+            };
+            /** Row Start */
+            row_start: number;
+            /** Row End */
+            row_end: number;
+        };
+        /** DecisionView */
+        DecisionView: {
+            /** Id */
+            id: string;
+            /** Batch Index */
+            batch_index: number;
+            decision: components["schemas"]["Decision"];
+            /**
+             * Effective Status
+             * @enum {string}
+             */
+            effective_status: "OK" | "Fault Suspected";
+            /** Human Assessment */
+            human_assessment: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** EventView */
         EventView: {
             /** Id */
@@ -403,6 +576,13 @@ export interface components {
              */
             created_at: string;
         };
+        /** ForecastError */
+        ForecastError: {
+            /** Mae */
+            mae: number | null;
+            /** Forecast Errors */
+            forecast_errors: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -440,6 +620,52 @@ export interface components {
             /** Completed At */
             completed_at: string | null;
         };
+        /** PredictionMetrics */
+        PredictionMetrics: {
+            /**
+             * Lookback
+             * @default 10
+             */
+            lookback: number;
+            /**
+             * Horizon
+             * @default 5
+             */
+            horizon: number;
+            /**
+             * Forecasts
+             * @default 0
+             */
+            forecasts: number;
+            /** Mae */
+            mae?: number | null;
+            /** Slope Mean */
+            slope_mean?: number | null;
+            /** Slope Std */
+            slope_std?: number | null;
+            abrupt?: components["schemas"]["ReferenceMetric"] | null;
+            drift?: components["schemas"]["ReferenceMetric"] | null;
+            level?: components["schemas"]["ReferenceMetric"] | null;
+            /**
+             * Hold Threshold
+             * @default 20
+             */
+            hold_threshold: number;
+            /**
+             * Constant
+             * @default false
+             */
+            constant: boolean;
+        };
+        /** ReferenceMetric */
+        ReferenceMetric: {
+            /** Median */
+            median: number;
+            /** Scale */
+            scale: number;
+            /** Count */
+            count: number;
+        };
         /** ReportView */
         ReportView: {
             /** Profiles */
@@ -460,6 +686,12 @@ export interface components {
             interpretation_message: string;
             /** Reference Version */
             reference_version: string;
+            /** Predictions */
+            predictions?: {
+                [key: string]: components["schemas"]["PredictionMetrics"];
+            };
+            /** Explanations */
+            explanations?: components["schemas"]["ChannelExplanation"][];
         };
         /** ReviewCreate */
         ReviewCreate: {
@@ -518,7 +750,7 @@ export interface components {
             batch_rows: number;
             /**
              * Interval
-             * @default 1
+             * @default 10
              */
             interval: number;
             /**
@@ -528,9 +760,15 @@ export interface components {
             threshold: number;
             /**
              * Analysis Version
-             * @default foundation-v1
+             * @default monitor-v2
              */
             analysis_version: string;
+            /** Path */
+            path?: string | null;
+            /** Limits */
+            limits?: {
+                [key: string]: components["schemas"]["ChannelLimit"];
+            };
         };
         /** RunControl */
         RunControl: {
@@ -565,6 +803,20 @@ export interface components {
              */
             created_at: string;
         };
+        /** SourceChoice */
+        SourceChoice: {
+            /** Path */
+            path: string;
+            /** Name */
+            name: string;
+        };
+        /** SourcePreview */
+        SourcePreview: {
+            /** Path */
+            path: string;
+            /** Channels */
+            channels: string[];
+        };
         /** SourceView */
         SourceView: {
             /** Id */
@@ -584,6 +836,54 @@ export interface components {
             source_error: string | null;
             /** Model Status */
             model_status: string;
+        };
+        /** TracePoint */
+        TracePoint: {
+            /** Row */
+            row: number;
+            /** Sequence */
+            sequence: number;
+            /** Value */
+            value: number | null;
+            /** Forecast */
+            forecast: number | null;
+        };
+        /** TraceView */
+        TraceView: {
+            /** Channel Id */
+            channel_id: string;
+            /** Points */
+            points: components["schemas"]["TracePoint"][];
+            /** Flagged */
+            flagged: components["schemas"]["Trigger"][];
+        };
+        /** Trigger */
+        Trigger: {
+            /** Channel Id */
+            channel_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "abrupt" | "drift" | "level";
+            /** Value */
+            value: number;
+            /** Reference */
+            reference: number;
+            /** Scale */
+            scale: number;
+            /** Threshold */
+            threshold: number;
+            /** Score */
+            score: number;
+            /** Row Start */
+            row_start: number;
+            /** Row End */
+            row_end: number;
+            /** Detected At */
+            detected_at: number;
+            /** Evidence Ids */
+            evidence_ids?: string[];
         };
         /** ValidationError */
         ValidationError: {
@@ -643,6 +943,156 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemView"];
+                };
+            };
+        };
+    };
+    source_choices_api_v1_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceChoice"][];
+                };
+            };
+        };
+    };
+    source_preview_api_v1_sources_preview_get: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourcePreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decisions_api_v1_runs__run_id__decisions_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    answers_api_v1_findings__finding_id__answers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                finding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnswerView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trace_api_v1_runs__run_id__trace_get: {
+        parameters: {
+            query: {
+                channel_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

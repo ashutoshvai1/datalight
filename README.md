@@ -1,81 +1,78 @@
 # Datalight
 
-**Understand the data. Check its quality. Monitor changes. Keep human judgment in the loop.**
+**Understand the data. Monitor changes. Keep human judgment in the loop.**
 
-Datalight is a local decision-support application for the [Norrin challenge](Norrin_Hackathon_Challenge_Sep_2026.pdf). It reads an initial window from a mounted CSV, builds an evidence-backed understanding report, then replays subsequent batches as a stream. Findings and human reviews remain traceable to their original evidence.
+Datalight is a local CSV data-understanding and monitoring application for the [Norrin challenge](Norrin_Hackathon_Challenge_Sep_2026.pdf). Choose a file, build an initial understanding report, then press Play to replay the remaining observations in batches. Computed evidence and human reviews remain traceable.
+
+The [Tennessee Eastman export](docs/DATASET.md) is the primary testbed. Its labels, channel identities, ranges and fault catalogue are offline context, never detector inputs or model knowledge. The product's source-convention portability limits remain explicit in the [roadmap](docs/roadmap.md).
 
 ## Run it
 
-Requirements: Docker with Compose, about 4 GB available memory, and a readable UTF-8 CSV. Images and dependencies download on the first build. No GPU is needed.
+Requirements: Docker with Compose, approximately 4 GB available memory, and readable UTF-8 CSVs. A small synthetic fixture is included.
 
 ```bash
-# From this repository. A synthetic demo is included; no data download required.
-CSV_PATH=./tests/fixtures/demo.csv docker compose up --build
-
-# Or use your own mounted dataset.
-CSV_PATH=/absolute/path/te_process.csv docker compose up --build
+# Synthetic deployment; no download or model credentials required.
+DATA_DIR=./tests/fixtures docker compose up --build -d
 ```
 
-Open **http://localhost:8080**. Initial analysis starts automatically; reopening the browser does not duplicate it. The input file is mounted read-only and excluded from Docker images. The database persists across restarts. `docker compose down` preserves its volume.
+Open **http://localhost:8080**. Nothing is analyzed automatically. Select a CSV from the mounted directory, then choose initial samples, batch size, and seconds between batches. Defaults are **500 / 100 / 10 seconds**. Optional minimum/maximum channel limits are under a collapsed setup section. Custom paths must remain inside the data directory; browser uploads are outside this scope.
 
-For the real dataset, select **Fast-forward** to reach later observations: its first nonzero evaluation label is at row 250,001. Fast-forward processes every batch; labels never guide replay or live detection.
+The understanding report opens after submission. Monitoring remains paused until **Play**. Pause/resume preserves the checkpoint; EOF completes playback. The UI contains Understanding, Monitoring, and Decision log. Historical reports and reviews remain accessible. Old foundation analyses are readable; start a new analysis to use the new detectors.
 
-### Optional model interpretation
+The directory is mounted read-only. Files can be selected without restarting Docker. Source replacement requires a new analysis. `docker compose down` preserves database history.
 
-Statistical analysis works without model access. To enable Norrin interpretation:
+## Three local demos
+
+```bash
+uv run --project backend python scripts/prepare_demo.py te_process.csv
+DATA_DIR=./runtime/demos docker compose up --build -d
+```
+
+The extractor streams the original export, evaluates test run 1 of all 20 faulty scenarios, and selects distinct examples of abrupt change, sustained drift, and broad multichannel change. Ties use the scenario number. Each output contains healthy test runs 1 and 2 followed by one complete faulty test run: **2,880 rows**, with unchanged observations, headers, and sample resets. With a 500-row reference, healthy monitoring precedes the faulted scenario.
+
+Generated files are `runtime/demos/demo_abrupt.csv`, `demo_drift.csv`, and `demo_multichannel.csv`. Selection scores and source provenance remain in ignored `runtime/demo-selection.json`. Files, real-derived metrics, and credentials are excluded from Git and Docker images. Only synthetic data is used for committed fixtures and browser screenshots. Selection metadata never guides live monitoring.
+
+## Understanding and monitoring
+
+- **Quality:** completeness and invalid counts, user-configured bounds, and possible frozen behavior. Unspecified bounds are “Not configured.” Stuck warnings require a hold of at least 20 samples or five times the initial typical completed hold, whichever is larger. A constant initial channel is explicitly inconclusive.
+- **Statistics:** mean, standard deviation, observed minimum/maximum, strongest Pearson relationships with paired counts, and an expandable full correlation matrix.
+- **Prediction:** per-channel least-squares trend lines on 10 preceding samples forecast the next 5. The report gives chronologically evaluated MAE, signed mean slope and slope variability. Slopes are units per sample, never units per playback second.
+- **Change detection:** adjacent 10-sample mean differences, persistent 50-sample slopes, and fixed-reference level deviations. Temporal rules and reference scales are fixed from the initial window. Windows never bridge invalid values, configured-range violations, ordering gaps or independent runs.
+- **Monitoring:** recent 1,000 sample-level values and five-step-ahead forecasts, with flagged intervals. Each batch has one **OK / Fault Suspected** decision and a separate quality warning. OK means no process rule triggered; insufficient coverage appears prominently beside it.
+- **Review:** accept, question or override each batch decision. Overrides specify a status and reason; the latest human assessment is shown beside the preserved automated conclusion. Questions receive asynchronous LLM answers when configured. Reviews never recalibrate thresholds.
+
+The reference is provisional. A statistical change is not a fault diagnosis, and a repeated value is not by itself a proven sensor failure. See [architecture](docs/architecture.md) for exact rules, persistence, and model boundaries.
+
+## Optional LLM synthesis and questions
 
 ```bash
 cp .env.example .env
-# Edit .env: set LLM_ENABLED=true and LLM_API_KEY to your organizer-provided key.
-# Then run the same Docker command above.
+# Set LLM_ENABLED=true and the organizer-provided LLM_API_KEY in .env.
 ```
 
-The default endpoint is the supplied Norrin chat-completions endpoint. `LLM_MODEL=mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4` is the exact identifier returned by its model-list route. Change `LLM_ENDPOINT`, `LLM_MODEL`, and `LLM_API_KEY` to switch compatible providers. A local compatible endpoint can omit the key. Docker containers reach a host-local server via `host.docker.internal`, where supported by the Docker runtime.
+Provider settings remain backend-only. The default Norrin endpoint and exact configured model ID are in `.env.example`; compatible providers can be configured through `LLM_ENDPOINT`, `LLM_MODEL`, and `LLM_API_KEY`. A host-local compatible endpoint can use `host.docker.internal` where supported.
 
-**The CSV path is the only per-launch input after model credentials are provisioned once.** Never put secrets in `VITE_` variables. Only typed aggregate summaries reach the model; inspect every request and response in the decision log. Model outages leave statistical monitoring active and explicitly mark interpretation unavailable.
+Initial explanations cover every channel in groups of eight. The LLM receives opaque channel IDs and typed computed summaries. Explicit operator questions are sent with decision evidence; original channel names are replaced by IDs, and pasted numerical sequences/evaluation metadata are rejected. Do not put raw data or secrets in questions. Raw observations are never attached to provider requests.
 
-## Foundation capabilities
+Coverage and evidence references are validated. Failed groups remain visibly unavailable or partial. Model outages do not stop deterministic monitoring or reviews. Fault explanations are generated immediately from metrics; there is no automatic LLM call per monitoring batch. Detailed model attempts remain available through the API, outside the main UI.
 
-- **Understanding:** column classification, numeric profiles, completeness, robust statistics, update cadence, lag-1 behavior, and pairwise correlation with sample counts. Optional role hypotheses cite computed evidence. The first detected deviation per run can receive a separate model interpretation.
-- **Monitoring:** 500 initial observations, then 100-row batches at one-second intervals; pause/resume, fast-forward, restart with another window size, and previous-run access.
-- **Quality:** missing/non-finite/unparseable values, malformed record widths, sample gaps, duplicates, and ordering failures.
-- **Deviation:** a fixed-reference batch-median warning, using `abs(batch median − reference median) / (1.4826 × reference MAD) > 6`. Unsupported or unreliable channels are explicitly listed.
-- **Review:** accept, question, or override a conclusion with a self-declared operator name. Reviews preserve the original conclusion and never change future thresholds automatically.
-- **Recovery:** record-aligned checkpoints, atomic batch commits, leased jobs, source replacement detection, and append-only evidence/review tables.
+## Development and validation
 
-The initial reference is **provisional**, not certified healthy operation. Quality failures and process deviations are separate. Sequence boundaries reset temporal comparisons. Sample coordinates do not imply a timestamp or sampling interval. A statistically unusual value is not automatically invalid data.
-
-Physical/unit validation, validated stuck-sensor rules, lagged cross-correlation, clustering, natural-language rules, gradual drift, fault diagnosis, browser uploads, and a second-domain demonstration remain **unimplemented**. See the [requirement coverage and roadmap](docs/roadmap.md). This is a single local workspace, with no login or multi-tenancy.
-
-## Running and validating the repository
-
-Development uses Python 3.12, `uv`, Node 24, and pnpm 11.19.0. Locked dependencies are committed.
+Python 3.12, uv, Node 24, pnpm 11.19.0. Locked dependencies are committed.
 
 ```bash
 make install
-make db                 # PostgreSQL exposed locally at port 5433
+make db
 make migrate
-make api                # terminal 1; localhost:8000
-make worker             # terminal 2; synthetic fixture by default
-make web                # terminal 3; localhost:5173
-make check              # lint, types, CPU tests, devlog validation, web build
-make test-postgres      # migrations, concurrent claims, immutable records
-make test-browser       # running Docker app on localhost:8080 + synthetic fixture
-make smoke-restart      # synthetic stack only; restarts db/API/worker and checks recovery
+make api
+make worker
+make web
+make check
+make test-postgres
+make test-browser          # requires a running synthetic deployment
+make smoke-restart         # synthetic deployment only
+make types                 # after public contract changes
 make smoke-data CSV_PATH=./te_process.csv
 ```
 
-`make types` regenerates frontend types from the backend's OpenAPI schema. Native development commands read `.env`; `make` supplies the local database and source paths. See the [development guide](docs/development.md) for service lifecycle, browser setup, environment overrides, and test isolation.
-
-## Find the right context
-
-| Need | Start here |
-|---|---|
-| Agent instructions and invariants | [AGENTS.md](AGENTS.md) |
-| Active objective, owners, blockers, next steps | [Current state](devlog/current.md) |
-| Durable choices and rationale | [Decisions](devlog/decisions.md) |
-| System boundaries and data/model flow | [Architecture](docs/architecture.md) |
-| Phase status and challenge coverage | [Roadmap](docs/roadmap.md) |
-| Hierarchical handoff/context conventions | [Devlog guide](devlog/README.md) |
-
-Development context belongs in the devlog; operational evidence and human reviews belong in the application database. Git owns chronology.
+See the [development guide](docs/development.md) for environment and isolated test setup, [current state](devlog/current.md) for verified results, [decisions](devlog/decisions.md) for durable choices, and [roadmap](docs/roadmap.md) for unapproved future work.

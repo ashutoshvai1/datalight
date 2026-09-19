@@ -1,57 +1,45 @@
 # Architecture
 
-## Data flow
+The product is generic CSV understanding, quality assessment, change monitoring and review. [DATASET.md](DATASET.md) describes an offline testbed; it is never runtime model context.
 
-```mermaid
-flowchart LR
-  CSV[Read-only mounted CSV] --> Reader[Bounded record reader]
-  Reader --> Quality[Quality checks]
-  Quality --> Profile[Profiles and reference deviation]
-  Profile --> DB[(PostgreSQL evidence and audit)]
-  DB --> API[FastAPI]
-  API --> UI[React operator workspace]
-  UI --> Review[Append human review]
-  Review --> DB
-  Profile --> Summary[Typed aggregate allowlist]
-  Summary --> Model[Configured compatible model]
-  Model --> Validate[Schema and evidence validation]
-  Validate --> DB
-```
+## Data flow and interfaces
 
-## Services and ownership
+A read-only data directory feeds a bounded CSV reader. `GET /sources` lists choices, `/sources/preview?path=…` infers numeric channels, and `POST /runs` explicitly creates an analysis with path, initial count, batch size, interval and optional channel limits. Resolved paths, including symlinks, must stay within the configured root. Startup creates no run.
 
-Nginx serves the Vite production build and proxies `/api`. FastAPI exposes versioned REST resources and an SSE notification stream. The worker has separate replay and interpretation loops, so a slow model does not block ingestion. PostgreSQL owns runs, leased jobs, batch checkpoints, profiles, correlations, findings, reviews, events, and model-call history. A one-shot Compose service applies Alembic migrations before workers/API start.
+FastAPI serves versioned `/api/v1` resources. PostgreSQL owns source identities, runs, jobs, reports, evidence, immutable batch decisions, reviews, answers and model attempts. Nginx serves React. The worker has independent replay, initial-interpretation and question loops. OpenAPI generates browser contracts.
 
-The analysis module takes bounded in-memory data and returns deterministic results. It does not use HTTP, database sessions, or model clients. Ingestion strips evaluation values before analysis. The source adapter currently recognizes the supplied metadata fields; a future domain adapter can classify different metadata without changing the core profiler, review, or provider contracts.
+A report adds typed per-channel prediction metrics and explanations. `/runs/{id}/decisions` supplies typed decisions plus the current human assessment. `/runs/{id}/trace?channel_id=…` rereads bounded recent source records to return up to 1,000 points and forecasts. `/findings/{id}/reviews` appends reviews; `/findings/{id}/answers` returns persisted answers. Legacy findings, evidence, model-call, audit and SSE resources remain accessible outside the simplified UI.
+
+## Temporal analysis
+
+`analysis.py` computes profiles and correlations. `temporal.py` implements causal sample-window analysis with no dataset labels, physical channel identities, or playback-time assumptions.
+
+- Every trailing 10-sample window fits an OLS line against positions 0–9. Each horizon 1–5 is scored only when its target arrives. MAE averages all valid forecast/target pairs; the chart shows horizon 5. Mean signed slope and slope standard deviation summarize the initial window.
+- Abrupt change compares the difference between adjacent 10-sample means with the distribution of those differences in the initial window.
+- Drift uses a trailing 50-sample slope, evaluated every 10 samples from each continuous sequence start. Three consecutive evaluations must exceed the reference threshold in the same direction.
+- Level deviation uses a trailing 10-sample median against the initial value distribution. This retains fixed-reference deviation detection while removing dependence on playback batch size.
+- Reference center is the median. Scale is `max(1.4826*MAD, standard deviation, tolerance)`; tolerance is `max(1e-12, 1e-9*max(abs(initial valid values)))`. The trigger threshold is six scales. Fewer than three valid reference metrics makes a rule unavailable.
+- Invalid/out-of-range values invalidate affected temporal windows. Sample gaps, duplicates, reversal, or independent-run boundaries break windows; they are never interpolated. Counters and forecast context carry across ordinary batches.
+- Equal-value holds use exact equality. A frozen warning requires at least `max(20, ceil(5*median(initial completed hold lengths)))` samples. Holds censored by sequence ends or missing values are not used to infer typical completed cadence. Constant initial channels are marked inconclusive.
+
+Initial ranges are observational, not physical limits. Configured bounds are checked separately and excluded from temporal model inputs. Quality checks do not directly set process status. A batch is Fault Suspected if any process rule triggers; otherwise OK. OK with insufficient assessment explicitly warns about limited coverage. Coverage counts channels with usable baseline rules and at least one valid 50-sample assessment in the batch. Consecutive triggered samples are stored as intervals with their strongest metric, first detection coordinate, and affected range.
 
 ## Replay and recovery
 
-Startup uses a database advisory lock to register one initial run. A unique source fingerprint combines size, modification time, inode, and hashes of the first/last 64 KiB. This is a practical replacement check, **not a cryptographic hash of the entire dataset**. Input is assumed static for a replay; append/change requires an explicit new analysis. Reopening the browser is read-only.
+The initial report commits in a paused state unless the source is exhausted. Play schedules the first monitoring batch immediately; subsequent batches are scheduled after the configured interval. Batches stop at independent sequence resets and may be shorter than requested. The last partial batch is processed normally.
 
-The CSV reader uses complete records, including quoted newlines. Byte offsets are 64-bit and recorded only at record boundaries. Initial windows may contain several sequences; temporal features exclude transitions. Subsequent batches stop at a reset to sample 1. Other backward indices, duplicates, and gaps are quality findings. With no sample column, ordering uses file order and sequence checks are unavailable.
+Source replacement checks use size, mtime, inode, and hashes of the first/last 64 KiB. They are not a full-file cryptographic identity check. Files are assumed static during an analysis. Source changes require a new analysis.
 
-Jobs are claimed using `FOR UPDATE SKIP LOCKED`, a five-minute lease, and a token. Run locks serialize batch publication with controls. Evidence, findings, the batch summary, audit event, and next cursor commit in one transaction. A stale worker token cannot publish another worker's claim. PostgreSQL triggers prohibit updates/deletes to batches, evidence, findings, reviews, and audit events. This protects application history; it is not protection against a database administrator.
+Jobs use `FOR UPDATE SKIP LOCKED`, token ownership, and five-minute leases. Unique `(run_id, kind, task_key)` identities support report groups and individual questions. Run locks serialize controls with replay. Evidence, decision, batch, counters, history offsets and cursor commit together. State stores counters and the location of up to 69 preceding records; raw observations remain in the CSV and are reread locally. Trace access verifies source identity too.
 
-Pausing leaves a run resumable. A new analysis stops the active replay and retains previous runs. EOF completes the run. A missing, malformed, or replaced source fails visibly. Fast-forward changes pacing only, never batch composition, thresholds, or data selection.
+Database triggers prohibit updates/deletes to evidence, findings, reviews, answers, batches and audit events. A new analysis stops prior active work without deleting history. Old report fields have compatible defaults; old analyses require a new run to use the new detector version. Internal fast-forward remains for tests/backward compatibility, absent from the interface.
 
-## Evidence and statistical limits
+## Model and review boundaries
 
-Each numeric profile has a stable evidence ID tied to its run/batch. Valid observations supply quantiles, mean, standard deviation, median/MAD, successive-difference variation, lag-1 correlation, and equal-value hold lengths. Pairwise correlations include paired counts and reasons when undefined. None of these establishes a physical instrument identity.
+Only typed `SummaryPayload` aggregates leave the backend. Initial requests contain at most eight target channels, their profiles/predictions/quality, and up to three strongest relationships per target. Responses must cover exactly those channels and cite their own profile and prediction evidence. Partial group failures remain explicit.
 
-Channel eligibility requires at least 32 valid values, at most 5% missing/invalid values, and no malformed records in that window. The deviation detector requires both eligible batch and reference profiles plus positive reference MAD. It compares batch medians to the fixed initial reference with threshold 6. Small final batches, constant references, and unreliable channels are reported as unsupported. Partially usable batches retain explicit quality status.
+Questions are explicit user-provided text plus aggregate decision evidence and forecast errors. Original names are replaced with opaque IDs; numerical sequences and evaluation metadata are rejected. No raw CSV rows, observation arrays, original names or evaluation values are attached. Questions cannot change rules or decisions. Credentials stay in the authorization header, redirects are disabled, responses are bounded, and reflected configured keys are redacted.
 
-Physical range, unit consistency, wall-clock timeliness, and validated stuck-sensor checks are explicitly unavailable. Regular holds of two or five samples are evidence about cadence, not sensor failure. Initial normality is an assumption even when the dataset's hidden labels happen to say normal.
+Every model attempt stores its purpose, request, response/status and timestamps. Interrupted calls have an unknown outcome before retry; exactly-once external execution is not promised. Local publication remains idempotent under job leases. Evidence validation does not establish that a model explanation is correct.
 
-## Model boundary
-
-Only `SummaryPayload` leaves the environment: opaque channel IDs, profiles with at least 32 observations, up to 20 aggregate correlations, an optional selected deviation with reference statistics, evidence IDs, and a fixed provisional-reference statement. Raw rows, time series, original names, evaluation values, and API credentials are absent from the body. Credentials go only in the authorization header to the configured endpoint; redirects are disabled.
-
-Each attempt records its exact outgoing body, purpose, endpoint/model, response or failure, and timestamps. An interrupted request is labeled outcome-unknown before retry; exactly-once external execution is not promised. The adapter accepts JSON or one complete JSON code fence, then validates shape, unique channel hypotheses, and evidence membership. A selected deviation must cite both current and reference profiles. Reference validation does **not** prove the model's interpretation correct; the operator still reviews a tentative hypothesis.
-
-Provider failures leave the deterministic report available. At most two ordinary requests are queued per run: initial role hypotheses and interpretation of the first detected deviation. Separate worker loops keep both off the replay path. No model call runs on every batch. Local or EU-hosted compatible providers are configuration choices; the exact Norrin model ID comes from its `/v1/models` response; live completion verification is recorded in the devlog. This deployment has no analytics/CDN calls or external fonts.
-
-## Interfaces
-
-`/api/v1/system` discovers source/current run. Run resources provide config/status, report, recent/paginated batches, findings, model calls, and audit history. Controls pause/resume or change playback speed. Reviews target a finding and append accept/question/override records. Evidence is fetched by ID. SSE sends durable event IDs and supports `Last-Event-ID`; REST remains authoritative. OpenAPI generates the browser's TypeScript contracts.
-
-The initial deployment has one active replay, a trusted local operator, and self-declared reviewer names. Authentication, tenants, adaptive feedback, remote streaming, and retention policies are future decisions.
+One decision is appended for each monitoring batch, including OK. Accept, question and override append history. The latest accept/override determines the displayed human assessment; a question does not change it. Accept returns to the automated assessment, and override requires OK/Fault Suspected plus a reason. No action recalibrates the initial reference. Operators are self-declared names in a trusted local deployment; authentication and multi-tenancy are not included.

@@ -1,207 +1,253 @@
 import json
 
 import httpx
+from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from sqlalchemy import select
 
 from datalight import models as m
 from datalight import providers, service
+from datalight.api import create_app
 from datalight.schemas import ReportView
 
 
-def prepare(store):
-    settings, factory = store
+def prepare(started):
+    settings, factory, rid = started
     settings.llm_enabled = True
     settings.llm_api_key = SecretStr("fixture-only-secret")
-    service.bootstrap(factory, settings)
     service.replay(factory, settings, *service.claim(factory, "replay"))
     with factory() as session:
-        report = ReportView.model_validate(session.scalar(select(m.Run)).report)
-    return settings, factory, providers.summarize(report)
+        report = ReportView.model_validate(session.get(m.Run, rid).report)
+    return settings, factory, rid, providers.summarize(report)
 
 
 def response_for(summary, bad=False):
-    profile = summary.profiles[0]
-    hypothesis = {
-        "channel_id": profile.channel_id,
-        "role": "Varying numeric signal",
-        "explanation": "Observed variability supports a changing signal, but no physical identity is established.",
-        "confidence": "low",
-        "evidence_ids": ["invented" if bad else profile.evidence_id],
-        "assumptions": ["No physical units are known."],
-    }
-    return {"choices": [{"message": {"content": json.dumps({"hypotheses": [hypothesis]})}}]}
+    if summary.question is not None:
+        content = {
+            "text": "The decision follows the supplied thresholds; it is not a diagnosis.",
+            "evidence_ids": [summary.decision.evidence_ids[0]],
+        }
+    else:
+        content = {
+            "explanations": [
+                {
+                    "channel_id": p.channel_id,
+                    "text": "Observed variation and forecast errors describe behavior, not a physical role.",
+                    "evidence_ids": [
+                        "invented" if bad else p.evidence_id,
+                        p.prediction_evidence_id,
+                    ],
+                }
+                for p in summary.profiles
+            ]
+        }
+    return {"choices": [{"message": {"content": json.dumps(content)}}]}
 
 
-def test_egress_payload_and_persisted_call_contain_only_derived_summaries(store):
-    settings, factory, summary = prepare(store)
-    seen = []
-
+def transport(seen=None, bad=False):
     def handler(request):
         body = json.loads(request.content)
-        seen.append(body)
-        assert request.headers["authorization"] == "Bearer fixture-only-secret"
-        data = json.loads(body["messages"][1]["content"])
-        assert set(data) == {
-            "profiles",
-            "relationships",
-            "selected_findings",
-            "reference_assumption",
-        }
-        assert all("name" not in p and p["valid_count"] >= 32 for p in data["profiles"])
+        summary = providers.SummaryPayload.model_validate_json(body["messages"][1]["content"])
+        if seen is not None:
+            seen.append(body)
         for forbidden in (
             "faultNumber",
             "simulationRun",
             "fault_status",
             "signal_a",
-            "evaluation-only",
             "fixture-only-secret",
             '"rows"',
             '"samples"',
         ):
             assert forbidden not in json.dumps(body)
-        return httpx.Response(200, json=response_for(summary))
+        return httpx.Response(200, json=response_for(summary, bad))
 
-    job = service.claim(factory, "interpretation")
-    service.interpret(factory, settings, *job, transport=httpx.MockTransport(handler))
+    return httpx.MockTransport(handler)
+
+
+def test_all_channel_egress_and_audit(started):
+    settings, factory, rid, _ = prepare(started)
+    seen = []
+    service.interpret(
+        factory, settings, *service.claim(factory, "interpretation"), transport=transport(seen)
+    )
     with factory() as session:
         call = session.scalar(select(m.ModelCall))
         assert call.status == "succeeded" and call.request == seen[0]
-        assert session.scalar(select(m.Run)).report["interpretation_status"] == "available"
-        finding = session.scalar(select(m.Finding).where(m.Finding.category == "interpretation"))
-        assert session.get(m.Evidence, finding.evidence_ids[0]) is not None
+        report = session.get(m.Run, rid).report
+        assert report["interpretation_status"] == "available"
+        assert len(report["explanations"]) == len(report["profiles"]) == 4
+        for explanation in report["explanations"]:
+            assert all(session.get(m.Evidence, eid) for eid in explanation["evidence_ids"])
 
 
-def test_invalid_evidence_and_timeout_degrade_without_stopping_monitoring(store):
-    settings, factory, summary = prepare(store)
-    job = service.claim(factory, "interpretation")
-    service.interpret(
-        factory,
-        settings,
-        *job,
-        transport=httpx.MockTransport(
-            lambda _: httpx.Response(200, json=response_for(summary, bad=True))
-        ),
+def test_grouped_jobs_cover_every_channel_and_partial_failure(started):
+    settings, factory, rid = started
+    settings.data_path.write_text(
+        ",".join(f"channel_{i}" for i in range(19))
+        + "\n"
+        + "\n".join(",".join(str(row + i) for i in range(19)) for row in range(100))
     )
-    with factory() as session:
-        run = session.scalar(select(m.Run))
-        assert run.status == "running" and run.report["interpretation_status"] == "unavailable"
-        assert session.scalar(select(m.ModelCall)).status == "invalid"
-        assert (
-            session.scalar(select(m.Finding).where(m.Finding.category == "interpretation")) is None
-        )
+    # Re-register the changed fixture as an explicit new analysis.
+    client = TestClient(create_app(settings, factory))
+    settings.llm_enabled = True
+    settings.llm_api_key = SecretStr("fixture-only-secret")
+    rid = client.post("/api/v1/runs", json={"initial_rows": 80, "interval": 0}).json()["id"]
     service.replay(factory, settings, *service.claim(factory, "replay"))
-
-    def timeout(request):
-        raise httpx.ReadTimeout("fixture timeout", request=request)
-
-    outcome = providers.invoke(
-        settings,
-        summary,
-        providers.request_payload(summary, settings.llm_model),
-        httpx.MockTransport(timeout),
-    )
-    assert outcome.status == "timeout"
+    count = 0
+    while job := service.claim(factory, "interpretation"):
+        service.interpret(factory, settings, *job, transport=transport(bad=count == 1))
+        count += 1
+    with factory() as session:
+        report = session.get(m.Run, rid).report
+        assert count == 3 and report["interpretation_status"] == "partial"
+        assert len(report["explanations"]) == 11
 
 
-def test_bad_json_redirects_and_missing_credentials_are_explicit(store):
-    settings, _, summary = prepare(store)
+def test_invalid_missing_duplicate_coverage_and_timeout(started):
+    settings, factory, rid, summary = prepare(started)
     payload = providers.request_payload(summary, settings.llm_model)
-    for response in [
-        httpx.Response(200, text="not JSON"),
-        httpx.Response(200, json={"choices": []}),
-    ]:
+    for mode in ("missing", "duplicate", "evidence"):
+        reply = response_for(summary, bad=mode == "evidence")
+        content = json.loads(reply["choices"][0]["message"]["content"])
+        if mode == "missing":
+            content["explanations"].pop()
+        if mode == "duplicate":
+            content["explanations"][-1] = content["explanations"][0]
+        reply["choices"][0]["message"]["content"] = json.dumps(content)
         assert (
             providers.invoke(
-                settings, summary, payload, httpx.MockTransport(lambda _, reply=response: reply)
+                settings,
+                summary,
+                payload,
+                httpx.MockTransport(lambda _, r=reply: httpx.Response(200, json=r)),
             ).status
             == "invalid"
         )
-    redirect = httpx.MockTransport(
-        lambda _: httpx.Response(307, headers={"Location": "https://other.invalid"})
+    service.interpret(
+        factory, settings, *service.claim(factory, "interpretation"), transport=transport(bad=True)
     )
-    assert providers.invoke(settings, summary, payload, redirect).status == "failed"
-    settings.llm_api_key = SecretStr("")
-    assert "LLM_API_KEY" in settings.interpretation_unavailable
+    with factory() as session:
+        run = session.get(m.Run, rid)
+        assert run.status == "paused" and run.report["interpretation_status"] == "unavailable"
 
+    def timeout(request):
+        raise httpx.ReadTimeout("timeout", request=request)
 
-def test_provider_errors_are_auditable_without_reflected_credentials(store):
-    settings, _, summary = prepare(store)
-    outcome = providers.invoke(
-        settings,
-        summary,
-        providers.request_payload(summary, settings.llm_model),
-        httpx.MockTransport(
-            lambda _: httpx.Response(
-                404, json={"error": "Unknown model; reflected fixture-only-secret"}
-            )
-        ),
+    assert (
+        providers.invoke(settings, summary, payload, httpx.MockTransport(timeout)).status
+        == "timeout"
     )
-    assert outcome.status == "failed" and "404" in outcome.error
-    assert outcome.response == {"error": "Unknown model; reflected [REDACTED]"}
 
 
-def test_complete_json_fence_is_accepted_but_surrounding_prose_is_not(store):
-    settings, _, summary = prepare(store)
+def test_bad_json_redirects_credentials_and_fences(started):
+    settings, _, _, summary = prepare(started)
     payload = providers.request_payload(summary, settings.llm_model)
-    reply = response_for(summary)
-    content = reply["choices"][0]["message"]["content"]
-    for wrapped, expected in [
-        (f"```json\n{content}\n```", "succeeded"),
-        (f"Here is my answer: {content}", "invalid"),
-    ]:
-        reply["choices"][0]["message"]["content"] = wrapped
-        outcome = providers.invoke(
+    for reply in (httpx.Response(200, text="bad JSON"), httpx.Response(200, json={"choices": []})):
+        assert (
+            providers.invoke(
+                settings, summary, payload, httpx.MockTransport(lambda _, r=reply: r)
+            ).status
+            == "invalid"
+        )
+    assert (
+        providers.invoke(
             settings,
             summary,
             payload,
-            httpx.MockTransport(lambda _: httpx.Response(200, json=reply)),
-        )
-        assert outcome.status == expected
-
-
-def test_selected_deviation_is_bounded_and_requires_both_evidence_records(store):
-    settings, factory, _ = prepare(store)
-    while job := service.claim(factory, "replay"):
-        service.replay(factory, settings, *job)
-    with factory() as session:
-        jobs = session.scalars(select(m.Job).where(m.Job.kind == "finding_interpretation")).all()
-        assert len(jobs) == 1
-        assert session.scalar(select(m.Run)).status == "completed"
-    seen = []
-
-    def handler(request):
-        payload = json.loads(request.content)
-        summary = providers.SummaryPayload.model_validate_json(payload["messages"][1]["content"])
-        seen.append(summary)
-        assert len(summary.profiles) == 1 and len(summary.selected_findings) == 1
-        assert not summary.relationships
+            httpx.MockTransport(
+                lambda _: httpx.Response(307, headers={"Location": "https://other.invalid"})
+            ),
+        ).status
+        == "failed"
+    )
+    outcome = providers.invoke(
+        settings,
+        summary,
+        payload,
+        httpx.MockTransport(lambda _: httpx.Response(404, json={"error": "fixture-only-secret"})),
+    )
+    assert outcome.response == {"error": "[REDACTED]"}
+    for fenced in (True, False):
         reply = response_for(summary)
-        content = json.loads(reply["choices"][0]["message"]["content"])
-        content["hypotheses"][0]["evidence_ids"].append(
-            summary.selected_findings[0].reference_evidence_id
+        text = reply["choices"][0]["message"]["content"]
+        reply["choices"][0]["message"]["content"] = (
+            f"```json\n{text}\n```" if fenced else f"Answer: {text}"
         )
-        reply["choices"][0]["message"]["content"] = json.dumps(content)
-        return httpx.Response(200, json=reply)
+        assert providers.invoke(
+            settings,
+            summary,
+            payload,
+            httpx.MockTransport(lambda _, r=reply: httpx.Response(200, json=r)),
+        ).status == ("succeeded" if fenced else "invalid")
+
+
+def test_questions_are_independent_persistent_and_evidence_grounded(started):
+    settings, factory, rid, _ = prepare(started)
+    client = TestClient(create_app(settings, factory))
+    client.post(f"/api/v1/runs/{rid}/control", json={"action": "resume"})
+    service.replay(factory, settings, *service.claim(factory, "replay"))
+    decision = client.get(f"/api/v1/runs/{rid}/decisions").json()[0]
+    path = f"/api/v1/findings/{decision['id']}/reviews"
+    for question in ("Why is signal_a OK?", "What evidence supports this decision?"):
+        assert (
+            client.post(
+                path, json={"operator": "QA", "action": "question", "reason": question}
+            ).status_code
+            == 201
+        )
+    assert (
+        client.post(
+            path, json={"operator": "QA", "action": "question", "reason": "Data: 1,2,3,4,5"}
+        ).status_code
+        == 422
+    )
+    seen = []
+    while job := service.claim(factory, "question"):
+        service.interpret(factory, settings, *job, transport=transport(seen))
+        service.interpret(factory, settings, *job, transport=transport(seen))
+    assert len(seen) == 2
+    answers = (
+        TestClient(create_app(settings, factory))
+        .get(f"/api/v1/findings/{decision['id']}/answers")
+        .json()
+    )
+    assert len(answers) == 2 and all(a["status"] == "succeeded" for a in answers)
+    assert client.get(f"/api/v1/runs/{rid}/decisions").json()[0]["decision"] == decision["decision"]
+
+
+def test_question_cannot_cite_an_invented_decision_label(started):
+    settings, factory, rid, _ = prepare(started)
+    client = TestClient(create_app(settings, factory))
+    client.post(f"/api/v1/runs/{rid}/control", json={"action": "resume"})
+    service.replay(factory, settings, *service.claim(factory, "replay"))
+    decision = client.get(f"/api/v1/runs/{rid}/decisions").json()[0]
+    client.post(
+        f"/api/v1/findings/{decision['id']}/reviews",
+        json={"operator": "QA", "action": "question", "reason": "Why OK?"},
+    )
+
+    def invented(request):
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {"text": "No rule triggered.", "evidence_ids": ["decision"]}
+                            )
+                        }
+                    }
+                ]
+            },
+        )
 
     service.interpret(
         factory,
         settings,
-        *service.claim(factory, "finding_interpretation"),
-        transport=httpx.MockTransport(handler),
+        *service.claim(factory, "question"),
+        transport=httpx.MockTransport(invented),
     )
-    assert service.claim(factory, "finding_interpretation") is None
-    with factory() as session:
-        call = session.scalar(select(m.ModelCall))
-        assert call.purpose == "selected_deviation" and call.status == "succeeded"
-        finding = session.scalar(select(m.Finding).where(m.Finding.category == "interpretation"))
-        assert session.get(m.Finding, finding.details["related_finding_id"]).category == "deviation"
-        assert finding.batch_index > 0
-    # A conclusion missing its reference citation must not be published.
-    outcome = providers.invoke(
-        settings,
-        seen[0],
-        providers.request_payload(seen[0], settings.llm_model),
-        httpx.MockTransport(lambda _: httpx.Response(200, json=response_for(seen[0]))),
-    )
-    assert outcome.status == "invalid"
+    answers = client.get(f"/api/v1/findings/{decision['id']}/answers").json()
+    assert answers[0]["status"] == "invalid"

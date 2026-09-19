@@ -26,6 +26,7 @@ def store(tmp_path, dataset):
     settings = Settings(
         database_url=f"sqlite:///{tmp_path}/app.db",
         data_path=dataset,
+        data_dir=dataset.parent,
         batch_interval=0,
         llm_enabled=False,
         _env_file=None,
@@ -34,3 +35,15 @@ def store(tmp_path, dataset):
     Base.metadata.create_all(engine)
     yield settings, factory
     engine.dispose()
+
+
+@pytest.fixture
+def started(store):
+    from datalight import service
+    from datalight.schemas import RunConfig
+    settings, factory = store
+    with factory.begin() as session:
+        source = service.register_source(session, settings)
+        run = service.create_run(session, source, RunConfig(interval=0))
+        run_id = run.id
+    return settings, factory, run_id

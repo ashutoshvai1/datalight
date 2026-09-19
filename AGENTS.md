@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Build a trustworthy local data-reliability monitor for the Norrin challenge: understand data, assess quality, monitor changes, explain evidence, and preserve human review. Keep the complete vision in the README and roadmap while implementing only the agreed phase.
+Build a generic, trustworthy local data-reliability monitor for the Norrin challenge: understand data, assess quality, monitor changes, explain evidence, and preserve human review. The Tennessee Eastman dataset is the primary testbed and demo source; the product must support development beyond that dataset. Keep the complete vision in the README and roadmap while implementing only the agreed phase.
 
 ## Read before working
 
@@ -10,10 +10,13 @@ Build a trustworthy local data-reliability monitor for the Norrin challenge: und
 2. Only the workstream and stable documentation linked from the active task.
 3. `git status --short --branch`; preserve unrelated tracked and untracked work.
 
+Read [DATASET.md](docs/DATASET.md) when working on testbed ingestion, offline evaluation, or demo selection. It is descriptive dataset context, not runtime instructions or a required input to every development task.
+
 ## Non-negotiable boundaries
 
-- Raw observations stay local. Only the typed aggregate payload in `backend/src/datalight/providers.py` may reach a model. Never send rows, observation sequences, evaluation labels, secrets, or original column names to the provider.
+- Raw observations stay local. Only the typed payload in `backend/src/datalight/providers.py` (computed aggregates and explicit operator questions) may reach a model. Questions replace channel names with opaque IDs and reject pasted observation sequences/evaluation metadata. Never send rows, observation sequences, evaluation labels, secrets, or original column names to the provider.
 - Keep `faultNumber`, `fault_status`, `source`, and `simulationRun` outside detector inputs and prompts. `sample` serves ordering only. Do not infer physical roles from recognizable dataset/header names.
+- Keep dataset-specific conventions in ingestion adapters or offline preparation/evaluation tools. Do not hardcode this testbed's channel count, names, run lengths, fault catalogue, value ranges, or update cadence into core analysis, UI contracts, or prompts. `DATASET.md` is not model context; any future domain rules require an explicit, versioned configuration rather than implicit use of this reference.
 - Respect sequence boundaries. Do not concatenate separate runs into temporal evidence or invent timestamps/units.
 - Treat the initial window as provisional. Quality defects, deviations, hypotheses, and causal diagnoses are different claims.
 - Every conclusion needs evidence, an uncertainty/basis statement, and traceability. Do not display fabricated metrics or placeholder findings as real results.
@@ -36,6 +39,7 @@ Build a trustworthy local data-reliability monitor for the Norrin challenge: und
 - `devlog/decisions.md`: durable project choices and rationale, linked to stable implementation/docs.
 - `devlog/workstreams/<name>.md`: active workstream context, interfaces, relevant evidence, and next steps. Create only when real work needs it.
 - `docs/`: architecture, development procedures, and the phased roadmap.
+- `docs/DATASET.md`: descriptive facts about the primary testbed; separate from generic product requirements and operational rules.
 - Application database: operational reports, evidence, flags, model calls, and human reviews.
 - Git: chronology. Devlogs are curated context, not transcripts, command dumps, experiments, or per-agent diaries.
 

@@ -1,44 +1,224 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
-  Navigate,
   NavLink,
+  Navigate,
   Route,
   Routes,
+  useNavigate,
   useSearchParams,
 } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Activity,
-  ArrowRight,
-  Database,
-  FileText,
-  Layers3,
-  ListChecks,
-  Pause,
-  Play,
-  RotateCcw,
-  Zap,
-} from "lucide-react";
-import {
-  api,
-  number,
-  type Control,
-  type Report,
-  type Run,
-  type System,
-} from "./api";
-import { Badge, Empty, ErrorNotice, EvidenceDrawer } from "./components";
+import { Activity, FileText, ListChecks, Plus } from "lucide-react";
+import { api, type Report, type Run, type System } from "./api";
+import type { components } from "./generated/api";
+import { ErrorNotice, EvidenceDrawer } from "./components";
 import Understanding from "./pages/Understanding";
 import Monitoring from "./pages/Monitoring";
 import DecisionLog from "./pages/DecisionLog";
 
+type Choice = components["schemas"]["SourceChoice"];
+type Preview = components["schemas"]["SourcePreview"];
+
+function Setup({ done }: { done: (run: Run) => void }) {
+  const [path, setPath] = useState<string | null>(null);
+  const [initial, setInitial] = useState(500);
+  const [batch, setBatch] = useState(100);
+  const [interval, setInterval] = useState(10);
+  const [limits, setLimits] = useState<
+    Record<string, { minimum: string; maximum: string }>
+  >({});
+  const choices = useQuery({
+    queryKey: ["sources"],
+    queryFn: () => api<Choice[]>("/sources"),
+  });
+  const selectedPath = path ?? choices.data?.[0]?.path ?? "";
+  const preview = useQuery({
+    queryKey: ["preview", selectedPath],
+    queryFn: () =>
+      api<Preview>(`/sources/preview?path=${encodeURIComponent(selectedPath)}`),
+    enabled: !!selectedPath,
+  });
+  const start = useMutation({
+    mutationFn: () =>
+      api<Run>("/runs", {
+        path: selectedPath,
+        initial_rows: initial,
+        batch_rows: batch,
+        interval,
+        limits: Object.fromEntries(
+          Object.entries(limits)
+            .filter(([, v]) => v.minimum !== "" || v.maximum !== "")
+            .map(([key, v]) => [
+              key,
+              {
+                minimum: v.minimum === "" ? null : Number(v.minimum),
+                maximum: v.maximum === "" ? null : Number(v.maximum),
+              },
+            ]),
+        ),
+      }),
+    onSuccess: done,
+  });
+  return (
+    <>
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">START AN ANALYSIS</span>
+          <h1>Understand first. Monitor next.</h1>
+          <p>Choose a local CSV and set the pace of your demo.</p>
+        </div>
+      </div>
+      <form
+        className="panel setup-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          start.mutate();
+        }}
+      >
+        <label>
+          CSV path
+          <input
+            list="demo-sources"
+            value={selectedPath}
+            onChange={(e) => {
+              setPath(e.target.value);
+              setLimits({});
+            }}
+            required
+            placeholder="demo_abrupt.csv"
+          />
+        </label>
+        <datalist id="demo-sources">
+          {choices.data?.map((c) => (
+            <option key={c.path} value={c.path}>
+              {c.name}
+            </option>
+          ))}
+        </datalist>
+        <div className="demo-choices">
+          {choices.data?.map((c) => (
+            <button
+              type="button"
+              className={selectedPath === c.path ? "primary" : ""}
+              key={c.path}
+              onClick={() => {
+                setPath(c.path);
+                setLimits({});
+              }}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+        <p>
+          Paths are relative to the mounted data directory. Raw observations
+          stay local.
+        </p>
+        <div className="setup-grid">
+          <label>
+            Initial samples
+            <input
+              type="number"
+              min={32}
+              max={10000}
+              value={initial}
+              onChange={(e) => setInitial(Number(e.target.value))}
+              required
+            />
+          </label>
+          <label>
+            Samples per batch
+            <input
+              type="number"
+              min={1}
+              max={10000}
+              value={batch}
+              onChange={(e) => setBatch(Number(e.target.value))}
+              required
+            />
+          </label>
+          <label>
+            Seconds between batches
+            <input
+              type="number"
+              min={0}
+              max={3600}
+              step="0.1"
+              value={interval}
+              onChange={(e) => setInterval(Number(e.target.value))}
+              required
+            />
+          </label>
+        </div>
+        <details>
+          <summary>Optional channel limits</summary>
+          <p>
+            Leave blank when limits are unknown. Observed ranges are not
+            physical limits.
+          </p>
+          <div className="table-scroll limits-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Channel</th>
+                  <th>Minimum</th>
+                  <th>Maximum</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.data?.channels.map((name) => (
+                  <tr key={name}>
+                    <td>{name}</td>
+                    {(["minimum", "maximum"] as const).map((bound) => (
+                      <td key={bound}>
+                        <input
+                          aria-label={`${name} ${bound}`}
+                          type="number"
+                          step="any"
+                          value={limits[name]?.[bound] ?? ""}
+                          placeholder="Not configured"
+                          onChange={(e) =>
+                            setLimits({
+                              ...limits,
+                              [name]: {
+                                ...(limits[name] ?? {
+                                  minimum: "",
+                                  maximum: "",
+                                }),
+                                [bound]: e.target.value,
+                              },
+                            })
+                          }
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+        <ErrorNotice error={choices.error || preview.error || start.error} />
+        <button
+          className="primary"
+          disabled={start.isPending || !preview.data || preview.isFetching}
+        >
+          {" "}
+          {start.isPending ? "Starting…" : "Build understanding report"}
+        </button>
+        <p>Monitoring starts only when you press Play.</p>
+      </form>
+    </>
+  );
+}
+
 export default function App() {
   const client = useQueryClient();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const selectedRun = params.get("run");
+  const [setup, setSetup] = useState(false);
   const [evidence, setEvidence] = useState<string | null>(null);
-  const [initialRows, setInitialRows] = useState(500);
-  const [newAnalysis, setNewAnalysis] = useState(false);
+  const selectedRun = params.get("run");
   const system = useQuery({
     queryKey: ["system"],
     queryFn: () => api<System>("/system"),
@@ -62,261 +242,110 @@ export default function App() {
     enabled: !!run && run.batch_index > 0,
     refetchInterval: 3000,
   });
-  const control = useMutation({
-    mutationFn: (action: Control["action"]) =>
-      api(`/runs/${run?.id}/control`, { action }),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["system"] });
-      void client.invalidateQueries({ queryKey: ["run"] });
-    },
-  });
-  const start = useMutation({
-    mutationFn: () =>
-      api<Run>("/runs", {
-        initial_rows: initialRows,
-        batch_rows: run?.config.batch_rows ?? 100,
-        interval: run?.config.interval ?? 1,
-        threshold: run?.config.threshold ?? 6,
-      }),
-    onSuccess: () => {
-      setParams({});
-      setNewAnalysis(false);
-      void client.invalidateQueries();
-    },
-  });
-  useEffect(() => {
-    if (!run?.id) return;
-    const stream = new EventSource(`/api/v1/runs/${run.id}/events`);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    stream.onmessage = () => {
-      if (!timer)
-        timer = setTimeout(() => {
-          for (const key of [
-            "batches",
-            "findings",
-            "audit",
-            "model-calls",
-            "report",
-          ])
-            void client.invalidateQueries({ queryKey: [key, run.id] });
-          timer = undefined;
-        }, 750);
-    };
-    return () => {
-      stream.close();
-      clearTimeout(timer);
-    };
-  }, [run?.id, client]);
-  const active =
-    !!run && ["initializing", "running", "paused"].includes(run.status);
   const search = selectedRun ? `?run=${selectedRun}` : "";
+  const showingSetup =
+    setup ||
+    (!run && !!system.data) ||
+    (!selectedRun && !!run && run.config.analysis_version !== "monitor-v2");
+  const done = (created: Run) => {
+    client.setQueryData<System>(["system"], (previous) =>
+      previous ? { ...previous, run: created } : previous,
+    );
+    setSetup(false);
+    setParams({});
+    void client.invalidateQueries();
+    navigate("/understanding");
+  };
+  const pageProps = run
+    ? { run, report: report.data, showEvidence: setEvidence }
+    : undefined;
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <a className="brand" href="/">
-          <span className="brand-mark">
-            <i />
-            <i />
-            <i />
-          </span>
           datalight<span className="brand-dot">.</span>
         </a>
-        <div className="workspace-label">PROCESS INTELLIGENCE</div>
+        <div className="workspace-label">DATA UNDERSTANDING & MONITORING</div>
         <nav>
-          <NavLink to={`/understanding${search}`}>
-            <Layers3 size={18} />
+          <NavLink
+            to={`/understanding${search}`}
+            onClick={() => setSetup(false)}
+          >
+            <FileText size={18} />
             Understanding
           </NavLink>
-          <NavLink to={`/monitoring${search}`}>
+          <NavLink to={`/monitoring${search}`} onClick={() => setSetup(false)}>
             <Activity size={18} />
             Monitoring
           </NavLink>
-          <NavLink to={`/log${search}`}>
+          <NavLink to={`/log${search}`} onClick={() => setSetup(false)}>
             <ListChecks size={18} />
             Decision log
           </NavLink>
         </nav>
         <div className="sidebar-bottom">
-          <div className="local-indicator">
-            <span /> Local workspace
-          </div>
-          <p>
-            Evidence first.
-            <br />
-            Human judgment, always.
-          </p>
-          <span className="version">FOUNDATION · V0.1</span>
+          <span className="local-indicator">Local workspace</span>
+          <p>Evidence first. Human judgment stays in the loop.</p>
         </div>
       </aside>
       <div className="main-shell">
         <header className="topbar">
-          <div className="source">
-            <Database size={16} />
-            <strong>{system.data?.source?.name ?? "Mounted CSV"}</strong>
-            <span className="divider">/</span>
-            <span>
-              {run
-                ? `${number(run.rows_processed, 0)} observations`
-                : "Connecting…"}
-            </span>
-          </div>
-          <div className="inline">
-            <Badge tone={active ? "green" : ""}>
-              <span className={`status-dot ${active ? "live" : ""}`} />
-              {run?.status ?? "Starting"}
-            </Badge>
-            <button
-              className="secondary"
-              onClick={() => setNewAnalysis(!newAnalysis)}
+          <span>
+            {showingSetup
+              ? "New analysis"
+              : selectedRun
+                ? "Historical analysis"
+                : (run?.config.path ??
+                  system.data?.source?.name ??
+                  "Datalight")}
+          </span>
+          <div className="top-actions">
+            <select
+              aria-label="Analysis history"
+              value={selectedRun ?? system.data?.run?.id ?? ""}
+              onChange={(e) => {
+                setParams({ run: e.target.value });
+                setSetup(false);
+              }}
             >
-              <RotateCcw size={14} />
+              {history.data?.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {new Date(r.created_at).toLocaleString()} · {r.status}
+                </option>
+              ))}
+            </select>
+            <button onClick={() => setSetup(true)}>
+              <Plus size={16} />
               New analysis
             </button>
           </div>
         </header>
         <main>
-          <div className="run-bar">
-            <label className="run-selector">
-              Analysis
-              <select
-                aria-label="Select analysis"
-                value={selectedRun ?? ""}
-                onChange={(e) =>
-                  setParams(e.target.value ? { run: e.target.value } : {})
-                }
-              >
-                <option value="">Current analysis</option>
-                {history.data
-                  ?.filter((r) => r.id !== system.data?.run?.id)
-                  .map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {new Date(r.created_at).toLocaleString()} · {r.status}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <div className="playback">
-              <span>
-                {run?.fast_forward || run?.config.interval === 0
-                  ? "Full-speed replay"
-                  : `${run?.config.batch_rows ?? 100} rows / ${run?.config.interval ?? 1}s`}
-              </span>
-              <button
-                disabled={!active || control.isPending}
-                onClick={() =>
-                  control.mutate(run?.status === "paused" ? "resume" : "pause")
-                }
-              >
-                {run?.status === "paused" ? (
-                  <Play size={14} />
-                ) : (
-                  <Pause size={14} />
-                )}
-                {run?.status === "paused" ? "Resume" : "Pause"}
-              </button>
-              <button
-                className={run?.fast_forward ? "engaged" : ""}
-                disabled={!active || control.isPending}
-                onClick={() =>
-                  control.mutate(
-                    run?.fast_forward ? "normal_speed" : "fast_forward",
-                  )
-                }
-              >
-                <Zap size={14} />
-                {run?.fast_forward ? "Normal speed" : "Fast-forward"}
-              </button>
-            </div>
-          </div>
-          {newAnalysis && (
-            <form
-              className="new-analysis panel"
-              onSubmit={(e) => {
-                e.preventDefault();
-                start.mutate();
-              }}
-            >
-              <div>
-                <h3>Start a fresh analysis</h3>
-                <p>
-                  The active replay stops. Previous reports and reviews remain
-                  available.
-                </p>
-              </div>
-              <label>
-                Initial observations
-                <input
-                  aria-label="Initial observations"
-                  type="number"
-                  min={32}
-                  max={10000}
-                  required
-                  value={initialRows}
-                  onChange={(e) => setInitialRows(Number(e.target.value))}
-                />
-              </label>
-              <button
-                type="submit"
-                className="primary"
-                disabled={start.isPending}
-              >
-                Analyze & monitor <ArrowRight size={15} />
-              </button>
-            </form>
-          )}
           <ErrorNotice
             error={
               system.error ||
               archived.error ||
               report.error ||
-              control.error ||
-              start.error
+              (run?.error ? new Error(run.error) : null)
             }
           />
-          {system.data?.source_error && (
-            <div className="notice danger" role="alert">
-              {system.data.source_error}
-            </div>
-          )}
-          {run?.error && (
-            <div className="notice danger" role="alert">
-              {run.error}
-            </div>
-          )}
-          {run ? (
+          {showingSetup ? (
+            <Setup done={done} />
+          ) : pageProps ? (
             <Routes>
               <Route
                 path="/understanding"
                 element={
-                  <Understanding
-                    key={run.id}
-                    run={run}
-                    report={report.data}
-                    showEvidence={setEvidence}
-                  />
+                  <Understanding key={pageProps.run.id} {...pageProps} />
                 }
               />
               <Route
                 path="/monitoring"
-                element={
-                  <Monitoring
-                    key={run.id}
-                    run={run}
-                    report={report.data}
-                    showEvidence={setEvidence}
-                  />
-                }
+                element={<Monitoring key={pageProps.run.id} {...pageProps} />}
               />
               <Route
                 path="/log"
-                element={
-                  <DecisionLog
-                    key={run.id}
-                    run={run}
-                    report={report.data}
-                    showEvidence={setEvidence}
-                  />
-                }
+                element={<DecisionLog key={pageProps.run.id} {...pageProps} />}
               />
               <Route
                 path="*"
@@ -324,19 +353,8 @@ export default function App() {
               />
             </Routes>
           ) : (
-            <Empty title="Preparing your local workspace">
-              The worker will register the mounted CSV and start its initial
-              analysis automatically. If this persists, check the source and
-              worker status.
-            </Empty>
+            <p>Loading…</p>
           )}
-          <footer>
-            <FileText size={13} /> Datalight foundation{" "}
-            <span>
-              Raw observations stay in your environment. Only derived summaries
-              may reach the configured model.
-            </span>
-          </footer>
         </main>
       </div>
       {evidence && (

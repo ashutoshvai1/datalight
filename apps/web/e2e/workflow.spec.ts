@@ -1,118 +1,148 @@
 import { expect, test } from "@playwright/test";
 
-test("mounted CSV, replay controls, evidence, append-only review, and reload", async ({
+test("setup, paused report, sample chart, review and end of file", async ({
   page,
   request,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  const created = await request.post("/api/v1/runs", {
-    data: { initial_rows: 500, batch_rows: 100, interval: 3, threshold: 6 },
+  await page.goto("/");
+  await page.getByRole("button", { name: "New analysis", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Understand first. Monitor next." }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Initial samples")).toHaveValue("500");
+  await expect(page.getByLabel("Seconds between batches")).toHaveValue("10");
+  await page.getByLabel("Seconds between batches").fill("0.2");
+  await page.screenshot({
+    path: "test-results/setup-desktop.png",
+    fullPage: true,
   });
-  expect(created.status()).toBe(201);
-  const run = await created.json();
-  await page.goto("/understanding");
+  await page
+    .getByRole("button", { name: "Build understanding report" })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Channel profiles" }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: /signal_a/ })).toBeVisible();
-  await page.getByRole("button", { name: "Inspect evidence" }).click();
+  const run = (await (await request.get("/api/v1/system")).json()).run;
+  expect(run.status).toBe("paused");
+  expect(run.rows_processed).toBe(500);
+  await expect(
+    page.getByRole("button", { name: "signal_a", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Inspect evidence", exact: true })
+    .click();
   await expect(
     page.getByRole("dialog", { name: "Supporting evidence" }),
-  ).toBeVisible();
-  await expect(page.getByRole("dialog")).toContainText('"median"');
+  ).toContainText('"mean"');
   await page.getByRole("button", { name: "Close evidence" }).click();
-  await page.getByRole("button", { name: "Pause", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Resume", exact: true }),
-  ).toBeEnabled();
-  const paused = await (await request.get(`/api/v1/runs/${run.id}`)).json();
-  await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Resume", exact: true }),
-  ).toBeEnabled();
-  expect(
-    (await (await request.get(`/api/v1/runs/${run.id}`)).json()).rows_processed,
-  ).toBe(paused.rows_processed);
+  await page.screenshot({
+    path: "test-results/understanding-desktop.png",
+    fullPage: true,
+  });
   await page.getByRole("link", { name: "Monitoring", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Watch the evidence evolve." }),
+    page.getByRole("button", { name: "Play", exact: true }),
+  ).toBeEnabled();
+  await page.reload();
+  expect(
+    (await (await request.get(`/api/v1/runs/${run.id}`)).json()).rows_processed,
+  ).toBe(500);
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (await (await request.get(`/api/v1/runs/${run.id}`)).json())
+          .rows_processed,
+    )
+    .toBeGreaterThan(500);
+  // Pause through the API before a fast synthetic replay finishes, then verify the UI state.
+  await request.post(`/api/v1/runs/${run.id}/control`, {
+    data: { action: "pause" },
+  });
+  await expect(
+    page.getByRole("button", { name: "Play", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Accept", exact: true }).first(),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Resume", exact: true }).click();
-  await page.getByRole("button", { name: "Fast-forward", exact: true }).click();
+  const card = page.locator(".decision-card").first();
+  await card.getByRole("button", { name: "Override", exact: true }).click();
+  await card.getByLabel("Your name").fill("Browser QA");
+  await card.getByLabel("Override reason").fill("Synthetic operator review.");
+  await card
+    .getByRole("combobox", { name: "Human assessment", exact: true })
+    .selectOption("Fault Suspected");
+  await card.getByRole("button", { name: "Save review" }).click();
+  await expect(
+    card
+      .getByText("Human assessment: Fault Suspected", { exact: true })
+      .first(),
+  ).toBeVisible();
+  await card.getByRole("button", { name: "Question", exact: true }).click();
+  await expect(card.getByLabel("Your name")).toHaveValue("Browser QA");
+  await card
+    .getByLabel("Your question")
+    .fill("Why did the automated rule choose this status?");
+  await card.getByRole("button", { name: "Ask question", exact: true }).click();
+  await expect(
+    card.getByText(/Model interpretation is disabled/),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page
+      .locator(".decision-card")
+      .first()
+      .getByText("Human assessment: Fault Suspected", { exact: true })
+      .first(),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect
     .poll(
       async () =>
         (await (await request.get(`/api/v1/runs/${run.id}`)).json()).status,
     )
     .toBe("completed");
-  const findings = await (
-    await request.get(`/api/v1/runs/${run.id}/findings`)
+  await expect(
+    page.getByRole("button", { name: "Play", exact: true }),
+  ).toBeDisabled();
+  await page.getByLabel("Trend channel").selectOption("c002");
+  const trace = await (
+    await request.get(`/api/v1/runs/${run.id}/trace?channel_id=c002`)
   ).json();
+  expect(trace.points).toHaveLength(1000);
   expect(
-    findings.some((f: { category: string }) => f.category === "quality"),
+    trace.points.some((p: { forecast: number | null }) => p.forecast !== null),
   ).toBeTruthy();
-  expect(
-    findings.some((f: { category: string }) => f.category === "deviation"),
-  ).toBeTruthy();
-  await page.getByRole("link", { name: "Decision log", exact: true }).click();
-  await page.getByLabel("Finding category").selectOption("assumption");
-  await page.getByRole("button", { name: "Review conclusion" }).click();
-  await page.getByLabel("Your name").fill("Browser QA");
-  await page.getByLabel("Review action").selectOption("override");
-  await page
-    .getByLabel("Explanation", { exact: true })
-    .fill("This fixture does not establish healthy operation.");
-  await page
-    .getByLabel("Replacement conclusion")
-    .fill("Keep the reference provisional until operator validation.");
-  await page.getByRole("button", { name: "Save review" }).click();
-  await expect(page.getByRole("status")).toHaveText("Review saved");
-  await expect(
-    page.getByText(
-      "Keep the reference provisional until operator validation.",
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await page.reload();
-  await page.getByLabel("Finding category").selectOption("assumption");
-  await page.getByRole("button", { name: "Review conclusion" }).click();
-  await expect(
-    page.getByText(
-      "Keep the reference provisional until operator validation.",
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Provisional reference established" }),
-  ).toBeVisible();
-  const original = findings.find(
-    (f: { category: string }) => f.category === "assumption",
-  );
-  const after = await (
-    await request.get(`/api/v1/runs/${run.id}/findings?category=assumption`)
+  const decisions = await (
+    await request.get(`/api/v1/runs/${run.id}/decisions`)
   ).json();
-  expect(after[0]).toEqual(original);
-  expect(errors).toEqual([]);
-  await page.goto("/understanding");
-  await expect(
-    page.getByRole("heading", { name: "Channel profiles" }),
-  ).toBeVisible();
+  expect(decisions).toHaveLength(11);
+  expect(
+    decisions.some(
+      (d: { decision: { status: string } }) =>
+        d.decision.status === "Fault Suspected",
+    ),
+  ).toBeTruthy();
   await page.screenshot({
-    path: "test-results/understanding-desktop.png",
+    path: "test-results/monitoring-desktop.png",
     fullPage: true,
   });
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("link", { name: "Decision log", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "A clearer picture of your data." }),
+    page.getByRole("heading", { name: "Decision log", exact: true }),
   ).toBeVisible();
+  await expect(page.locator(".decision-card")).toHaveCount(11);
+  await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBeTruthy();
   await page.screenshot({
-    path: "test-results/understanding-mobile.png",
+    path: "test-results/log-mobile.png",
     fullPage: true,
   });
+  expect(errors).toEqual([]);
 });

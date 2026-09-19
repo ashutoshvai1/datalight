@@ -31,3 +31,19 @@ Use one live coordination page, durable decisions, and active workstream context
 ## D008 — Foundation only; next phase undecided
 
 The full challenge vision is retained as coverage gaps in the [roadmap](../docs/roadmap.md). Future phases remain TBD until selected; do not silently promote backlog items into the current scope.
+
+## D009 — Generic product, explicit testbed knowledge
+
+Datalight is a generic CSV reliability and monitoring application. [DATASET.md](../docs/DATASET.md) owns descriptive knowledge of the primary Tennessee Eastman testbed and demo source. It informs offline preparation and evaluation, not detector features, universal thresholds, physical-role assumptions, or model prompts. Dataset-specific conventions belong in ingestion adapters/configuration and offline tools; the current reader's recognized metadata/sample fields are a documented portability limit. Future domain rules must be explicit and versioned. See [architecture](../docs/architecture.md) and the [roadmap](../docs/roadmap.md).
+
+## D010 — Approved simplification and explicit setup
+
+The 2026-09-19 approved plan supersedes D008's undecided next phase and D005's two-call cap. A mounted directory supplies selectable sources. Explicit setup defaults to 500 initial samples, 100 per batch and 10 seconds. Initial reporting leaves playback paused. Per-channel synthesis is grouped by eight; questions are separate evidence-grounded jobs. No automatic model call runs for each fault batch.
+
+## D011 — Sample-based detection and separate quality
+
+Rolling 10-sample OLS predicts five horizons; 20-sample adjacent-mean changes, 50-sample persistent slopes, and 10-sample median deviations use fixed initial reference statistics. Rules operate independently of playback batches. Quality warnings remain separate. At the user's explicit choice, insufficient coverage retains OK with a prominent limitation warning. See [architecture](../docs/architecture.md) for exact rules.
+
+## D012 — One batch decision and append-only discussion
+
+Every monitoring batch has one automated decision. Accept/question/override and model answers preserve it. Latest accept/override determines the visible human assessment without adapting the baseline. The simplified UI hides processing ledgers and model wire payloads while retaining backend traceability. Auto-pause and a last-value forecast comparator remain unapproved suggestions.

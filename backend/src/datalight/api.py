@@ -8,11 +8,12 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from . import models as m
+from . import providers, service, sources, temporal
 from . import schemas as s
-from . import service
+from .analysis import safe as analysis_safe
 from .config import Settings
 from .db import connect, now
-from .ingestion import SourceError, identity
+from .ingestion import SourceError, finite, read_window
 
 
 def create_app(settings: Settings | None = None, session_factory=None) -> FastAPI:
@@ -47,14 +48,11 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         run = session.scalar(select(m.Run).order_by(m.Run.created_at.desc()).limit(1))
         source = session.get(m.Source, run.source_id) if run else None
         source_error = None
-        try:
-            current_identity = identity(settings.data_path)
-            if source and source.identity != current_identity:
-                source_error = (
-                    "Mounted CSV has changed. Start a new analysis to register this source."
-                )
-        except SourceError as exc:
-            source_error = str(exc)
+        if source:
+            try:
+                service.source_path(source, settings)
+            except SourceError as exc:
+                source_error = str(exc)
         return {
             "source": source,
             "run": run,
@@ -62,6 +60,127 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
             "model_status": settings.interpretation_unavailable
             or f"Configured: {settings.llm_model}; access is verified when a request succeeds.",
         }
+
+    @app.get("/api/v1/sources", response_model=list[s.SourceChoice])
+    def source_choices():
+        return sources.choices(settings)
+
+    @app.get("/api/v1/sources/preview", response_model=s.SourcePreview)
+    def source_preview(path: str):
+        try:
+            return sources.preview(settings, path)
+        except SourceError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/api/v1/runs/{run_id}/decisions", response_model=list[s.DecisionView])
+    def decisions(
+        run_id: str, session: DB, offset: int = Query(0, ge=0), limit: int = Query(30, ge=1, le=100)
+    ):
+        get_run(session, run_id)
+        found = session.scalars(
+            select(m.Finding)
+            .where(m.Finding.run_id == run_id, m.Finding.category == "decision")
+            .order_by(m.Finding.batch_index.desc())
+            .offset(offset)
+            .limit(limit)
+        ).all()
+        result = []
+        for finding in found:
+            decision = s.Decision.model_validate(finding.details)
+            # Questions do not revise an assessment. Accept restores the machine assessment.
+            review = session.scalar(
+                select(m.Review)
+                .where(
+                    m.Review.finding_id == finding.id, m.Review.action.in_(["accept", "override"])
+                )
+                .order_by(m.Review.created_at.desc())
+                .limit(1)
+            )
+            result.append(
+                dict(
+                    id=finding.id,
+                    batch_index=finding.batch_index,
+                    decision=decision,
+                    effective_status=review.replacement
+                    if review and review.action == "override"
+                    else decision.status,
+                    human_assessment=f"{review.action.capitalize()} by {review.operator}"
+                    if review
+                    else None,
+                    created_at=finding.created_at,
+                )
+            )
+        return result
+
+    @app.get("/api/v1/findings/{finding_id}/answers", response_model=list[s.AnswerView])
+    def answers(finding_id: str, session: DB):
+        return session.scalars(
+            select(m.Answer)
+            .join(m.Review)
+            .where(m.Review.finding_id == finding_id)
+            .order_by(m.Answer.created_at)
+        ).all()
+
+    @app.get("/api/v1/runs/{run_id}/trace", response_model=s.TraceView)
+    def trace(run_id: str, channel_id: str, session: DB, limit: int = Query(1000, ge=1, le=1000)):
+        run = get_run(session, run_id)
+        if not run.report:
+            return dict(channel_id=channel_id, points=[], flagged=[])
+        profile = next((p for p in run.report["profiles"] if p["id"] == channel_id), None)
+        if profile is None:
+            raise HTTPException(404, "Channel not found")
+        try:
+            path = service.source_path(session.get(m.Source, run.source_id), settings)
+            first = max(1, run.rows_processed - limit + 1)
+            context_start = max(1, first - temporal.HISTORY)
+            batch = session.scalar(
+                select(m.Batch)
+                .where(m.Batch.run_id == run.id, m.Batch.row_start <= context_start)
+                .order_by(m.Batch.row_start.desc())
+                .limit(1)
+            )
+            if batch is None:
+                return dict(channel_id=channel_id, points=[], flagged=[])
+            # At most one configured batch plus chart context is read, never the full source.
+            window = read_window(
+                path,
+                batch.summary["start_offset"],
+                run.rows_processed - batch.row_start + 1,
+                sequence=batch.summary.get("start_sequence", batch.sequence),
+                split_sequences=False,
+            )
+            config = s.RunConfig.model_validate(run.config)
+            values, segments, _ = temporal.vectors(
+                window, profile["name"], config.limits.get(profile["name"])
+            )
+            forecasts = temporal.features(values, segments)["forecast"]
+            index = window.header.index(profile["name"])
+            points = [
+                dict(
+                    row=batch.row_start + i,
+                    sequence=int(segments[i]),
+                    value=finite(row[index]),
+                    forecast=analysis_safe(forecasts[i]),
+                )
+                for i, row in enumerate(window.rows)
+                if batch.row_start + i >= first
+            ]
+            findings = session.scalars(
+                select(m.Finding).where(
+                    m.Finding.run_id == run.id,
+                    m.Finding.category == "decision",
+                    m.Finding.batch_index >= batch.index,
+                )
+            ).all()
+            flagged = [
+                t
+                for f in findings
+                for t in f.details["triggers"]
+                if t["channel_id"] == channel_id and t["row_end"] >= first
+            ]
+            return dict(channel_id=channel_id, points=points, flagged=flagged)
+        except SourceError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @app.get("/api/v1/runs", response_model=list[s.RunView])
     def runs(session: DB, offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100)):
@@ -73,9 +192,13 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
     def new_run(config: s.RunConfig, session: DB):
         service.coordination_lock(session)
         try:
-            source = service.register_source(session, settings)
+            source = service.register_source(session, settings, config.path)
         except SourceError as exc:
             raise HTTPException(422, str(exc)) from exc
+        preview = sources.preview(settings, source.path)
+        if set(config.limits) - set(preview["channels"]):
+            raise HTTPException(422, "Limits must refer to numeric channels in the selected file.")
+        config = config.model_copy(update={"analysis_version": "monitor-v2", "threshold": 6})
         for old in session.scalars(
             select(m.Run)
             .where(m.Run.status.in_(["initializing", "running", "paused"]))
@@ -166,9 +289,42 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         finding = session.get(m.Finding, finding_id)
         if finding is None:
             raise HTTPException(404, "Finding not found")
+        if (
+            finding.category == "decision"
+            and body.action == "override"
+            and body.replacement not in ("OK", "Fault Suspected")
+        ):
+            raise HTTPException(422, "Choose OK or Fault Suspected.")
+        if body.action == "question" and finding.category == "decision":
+            run = get_run(session, finding.run_id)
+            try:
+                providers.question_text(
+                    body.reason, s.ReportView.model_validate(run.report), settings
+                )
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
         value = m.Review(finding_id=finding_id, **body.model_dump())
         session.add(value)
         session.flush()
+        if body.action == "question" and finding.category == "decision":
+            if settings.interpretation_unavailable:
+                session.add(
+                    m.Answer(
+                        review_id=value.id,
+                        status="unavailable",
+                        text=settings.interpretation_unavailable,
+                        evidence_ids=[],
+                    )
+                )
+            else:
+                session.add(
+                    m.Job(
+                        run_id=finding.run_id,
+                        kind="question",
+                        task_key=value.id,
+                        payload={"review_id": value.id},
+                    )
+                )
         service.event(
             session,
             finding.run_id,

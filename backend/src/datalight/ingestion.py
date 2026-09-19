@@ -103,6 +103,8 @@ class Window:
     sample_index: int | None = None
     # Numeric arrays/metadata never mix: evaluation values are removed at read time.
     excluded_columns: list[str] = field(default_factory=list)
+    offsets: list[int] = field(default_factory=list)
+    invalid_records: list[bool] = field(default_factory=list)
 
 
 def read_window(
@@ -166,6 +168,8 @@ def read_window(
                     elif sample > previous + 1:
                         result.gaps += 1
             result.schema_errors += int(bad_schema)
+            result.invalid_records.append(bad_schema)
+            result.offsets.append(start)
             result.rows.append(row)
             result.segments.append(result.sequence)
             result.last_sample = sample

@@ -1,29 +1,26 @@
-# Phased roadmap and challenge coverage
+# Roadmap and challenge coverage
 
-## Phase 1 — Foundation
+Datalight is a generic local CSV understanding and monitoring app. The [primary testbed](DATASET.md) informs offline demos, not implicit product rules. Selected demonstrations do not establish general fault-detection accuracy.
 
-Deliver the mounted-CSV report → quality checks → basic deviation warning → evidence inspection → persisted human-review workflow. Include container startup, recoverable jobs, provider boundaries, synthetic tests, and concise collaboration context.
+## Implemented foundation and approved simplification
 
-Acceptance gates: Docker startup on the synthetic fixture; bounded-memory real-file smoke; successful pause/resume/EOF and crash recovery; distinct quality/deviation findings; durable human review; isolated metadata; fake-provider egress/failure tests; PostgreSQL migration/concurrency checks; browser workflow; generated-contract and devlog validation. Verification status belongs in [current state](../devlog/current.md).
+Explicit source setup; initial quality/statistical/prediction report; complete channel synthesis in bounded LLM groups; paused batch replay; sample-level charts; abrupt change, persistent drift and level-deviation rules; evidence-backed batch decisions; separate quality warnings; append-only accept/question/override history and asynchronous answers; recovery and source-identity checks. Three local original-data demos use two healthy runs followed by a faulty run.
 
-## Phase 2 — TBD
+Validation and current limitations are recorded in [current state](../devlog/current.md). The prior foundation remains the storage and recovery basis; the approved simplification supersedes its automatic startup, one-second pacing, partial role hypotheses and per-channel finding UI.
 
-The next phase has not been selected. Preserve these gaps without inventing a schedule or creating workstream stubs:
+## Suggestions awaiting approval
 
-| Challenge requirement | Foundation status | Remaining work |
-|---|---|---|
-| Automatic initial understanding | Basic implementation | Richer interpretation and coverage assessment |
-| Channel statistics and correlations | Implemented | Lagged cross-correlation and clustering |
-| Functional roles and measured/actuator distinction | Tentative model hypotheses only | Better structural evidence and review |
-| Quality on each incoming batch | Missingness, numeric validity, schema, sequence | Domain ranges, units, validated frozen-sensor rules |
-| Natural-language operating rules | Not implemented | Approved declarative rules and traceable execution |
-| Abrupt anomalies and gradual drift | Basic batch-median reference deviation | Gradual and multivariate detectors; evaluation |
-| Fault type and ranked contributors | Not implemented | Evidence-backed diagnosis; no causal overclaiming |
-| Accept/question/override | Implemented on findings, including reference/hypotheses | Broader operator feedback workflows |
-| Complete decision/model-call log | Implemented locally | Export/retention policy and usability improvements |
-| Full dataset handling | Incremental reader and recoverable replay | Full-pass timing and storage measurement |
-| Local/EU model swapping | Configurable adapter; live Norrin calls verified | Verify a second provider |
-| Cross-domain adaptability | Architecture separates domain parsing from core | Demonstrate a business dataset or formal walkthrough |
-| Browser upload | Deferred by agreed scope | Bounded local upload/source lifecycle |
+- Optional automatic pause at the first suspected fault.
+- Compare regression MAE with a last-value prediction baseline.
 
-Human overrides remain review records. Any proposal to automatically update baselines, rules, or thresholds requires a separate decision with validation and audit implications.
+Neither suggestion is implemented.
+
+## Future work, not approved
+
+- Natural-language operating rules, unit validation and wall-clock timeliness.
+- Validated physical fault diagnosis and causal explanations.
+- Lagged relationships, multivariate detectors and domain-specific evaluation.
+- Additional source adapters and a second-domain demonstration. The current reader recognizes the primary testbed's metadata fields and sample-reset convention.
+- Full-file replay/storage measurement, retention policy, and a second live provider.
+- Browser uploads, remote streaming, authentication and multi-tenancy.
+- Baseline or threshold adaptation from human review. Overrides currently change only the recorded human assessment.

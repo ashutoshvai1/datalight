@@ -39,7 +39,7 @@ jobs:
   browser:
     runs-on: ubuntu-latest
     env:
-      CSV_PATH: ./tests/fixtures/demo.csv
+      DATA_DIR: ./tests/fixtures
       COMPOSE_PROJECT_NAME: datalight-ci
       LLM_ENABLED: 'false'
     steps:

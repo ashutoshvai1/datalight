@@ -40,6 +40,236 @@
         }
       }
     },
+    "/api/v1/sources": {
+      "get": {
+        "summary": "Source Choices",
+        "operationId": "source_choices_api_v1_sources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceChoice"
+                  },
+                  "type": "array",
+                  "title": "Response Source Choices Api V1 Sources Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sources/preview": {
+      "get": {
+        "summary": "Source Preview",
+        "operationId": "source_preview_api_v1_sources_preview_get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}/decisions": {
+      "get": {
+        "summary": "Decisions",
+        "operationId": "decisions_api_v1_runs__run_id__decisions_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DecisionView"
+                  },
+                  "title": "Response Decisions Api V1 Runs  Run Id  Decisions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/findings/{finding_id}/answers": {
+      "get": {
+        "summary": "Answers",
+        "operationId": "answers_api_v1_findings__finding_id__answers_get",
+        "parameters": [
+          {
+            "name": "finding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Finding Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnswerView"
+                  },
+                  "title": "Response Answers Api V1 Findings  Finding Id  Answers Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}/trace": {
+      "get": {
+        "summary": "Trace",
+        "operationId": "trace_api_v1_runs__run_id__trace_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "channel_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Channel Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 1000,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/runs": {
       "get": {
         "summary": "Runs",
@@ -771,6 +1001,49 @@
   },
   "components": {
     "schemas": {
+      "AnswerView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "review_id": {
+            "type": "string",
+            "title": "Review Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "review_id",
+          "status",
+          "text",
+          "evidence_ids",
+          "created_at"
+        ],
+        "title": "AnswerView"
+      },
       "BatchView": {
         "properties": {
           "id": {
@@ -821,6 +1094,62 @@
           "created_at"
         ],
         "title": "BatchView"
+      },
+      "ChannelExplanation": {
+        "properties": {
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel_id",
+          "text",
+          "evidence_ids"
+        ],
+        "title": "ChannelExplanation"
+      },
+      "ChannelLimit": {
+        "properties": {
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ChannelLimit"
       },
       "ChannelProfile": {
         "properties": {
@@ -1129,6 +1458,145 @@
         ],
         "title": "Correlation"
       },
+      "Coverage": {
+        "properties": {
+          "assessed": {
+            "type": "integer",
+            "title": "Assessed"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limited": {
+            "type": "boolean",
+            "title": "Limited"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "assessed",
+          "total",
+          "limited",
+          "message"
+        ],
+        "title": "Coverage"
+      },
+      "Decision": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "Fault Suspected"
+            ],
+            "title": "Status"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/Coverage"
+          },
+          "triggers": {
+            "items": {
+              "$ref": "#/components/schemas/Trigger"
+            },
+            "type": "array",
+            "title": "Triggers"
+          },
+          "quality_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Quality Warnings"
+          },
+          "forecast_errors": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ForecastError"
+            },
+            "type": "object",
+            "title": "Forecast Errors"
+          },
+          "row_start": {
+            "type": "integer",
+            "title": "Row Start"
+          },
+          "row_end": {
+            "type": "integer",
+            "title": "Row End"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "explanation",
+          "coverage",
+          "triggers",
+          "quality_warnings",
+          "row_start",
+          "row_end"
+        ],
+        "title": "Decision"
+      },
+      "DecisionView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "batch_index": {
+            "type": "integer",
+            "title": "Batch Index"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/Decision"
+          },
+          "effective_status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "Fault Suspected"
+            ],
+            "title": "Effective Status"
+          },
+          "human_assessment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Human Assessment"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "batch_index",
+          "decision",
+          "effective_status",
+          "human_assessment",
+          "created_at"
+        ],
+        "title": "DecisionView"
+      },
       "EventView": {
         "properties": {
           "id": {
@@ -1272,6 +1740,32 @@
         ],
         "title": "FindingView"
       },
+      "ForecastError": {
+        "properties": {
+          "mae": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mae"
+          },
+          "forecast_errors": {
+            "type": "integer",
+            "title": "Forecast Errors"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mae",
+          "forecast_errors"
+        ],
+        "title": "ForecastError"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1374,6 +1868,125 @@
         ],
         "title": "ModelCallView"
       },
+      "PredictionMetrics": {
+        "properties": {
+          "lookback": {
+            "type": "integer",
+            "title": "Lookback",
+            "default": 10
+          },
+          "horizon": {
+            "type": "integer",
+            "title": "Horizon",
+            "default": 5
+          },
+          "forecasts": {
+            "type": "integer",
+            "title": "Forecasts",
+            "default": 0
+          },
+          "mae": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mae"
+          },
+          "slope_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slope Mean"
+          },
+          "slope_std": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slope Std"
+          },
+          "abrupt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenceMetric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "drift": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenceMetric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "level": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenceMetric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hold_threshold": {
+            "type": "integer",
+            "title": "Hold Threshold",
+            "default": 20
+          },
+          "constant": {
+            "type": "boolean",
+            "title": "Constant",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PredictionMetrics"
+      },
+      "ReferenceMetric": {
+        "properties": {
+          "median": {
+            "type": "number",
+            "title": "Median"
+          },
+          "scale": {
+            "type": "number",
+            "title": "Scale"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "median",
+          "scale",
+          "count"
+        ],
+        "title": "ReferenceMetric"
+      },
       "ReportView": {
         "properties": {
           "profiles": {
@@ -1426,6 +2039,20 @@
           "reference_version": {
             "type": "string",
             "title": "Reference Version"
+          },
+          "predictions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PredictionMetrics"
+            },
+            "type": "object",
+            "title": "Predictions"
+          },
+          "explanations": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelExplanation"
+            },
+            "type": "array",
+            "title": "Explanations"
           }
         },
         "additionalProperties": false,
@@ -1559,16 +2186,16 @@
           "batch_rows": {
             "type": "integer",
             "maximum": 10000.0,
-            "minimum": 32.0,
+            "minimum": 1.0,
             "title": "Batch Rows",
             "default": 100
           },
           "interval": {
             "type": "number",
-            "maximum": 60.0,
+            "maximum": 3600.0,
             "minimum": 0.0,
             "title": "Interval",
-            "default": 1
+            "default": 10
           },
           "threshold": {
             "type": "number",
@@ -1580,7 +2207,25 @@
           "analysis_version": {
             "type": "string",
             "title": "Analysis Version",
-            "default": "foundation-v1"
+            "default": "monitor-v2"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "limits": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ChannelLimit"
+            },
+            "type": "object",
+            "title": "Limits"
           }
         },
         "additionalProperties": false,
@@ -1673,6 +2318,47 @@
         ],
         "title": "RunView"
       },
+      "SourceChoice": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "name"
+        ],
+        "title": "SourceChoice"
+      },
+      "SourcePreview": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Channels"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "channels"
+        ],
+        "title": "SourcePreview"
+      },
       "SourceView": {
         "properties": {
           "id": {
@@ -1745,6 +2431,150 @@
           "model_status"
         ],
         "title": "SystemView"
+      },
+      "TracePoint": {
+        "properties": {
+          "row": {
+            "type": "integer",
+            "title": "Row"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "forecast": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "row",
+          "sequence",
+          "value",
+          "forecast"
+        ],
+        "title": "TracePoint"
+      },
+      "TraceView": {
+        "properties": {
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/TracePoint"
+            },
+            "type": "array",
+            "title": "Points"
+          },
+          "flagged": {
+            "items": {
+              "$ref": "#/components/schemas/Trigger"
+            },
+            "type": "array",
+            "title": "Flagged"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel_id",
+          "points",
+          "flagged"
+        ],
+        "title": "TraceView"
+      },
+      "Trigger": {
+        "properties": {
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "abrupt",
+              "drift",
+              "level"
+            ],
+            "title": "Kind"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value"
+          },
+          "reference": {
+            "type": "number",
+            "title": "Reference"
+          },
+          "scale": {
+            "type": "number",
+            "title": "Scale"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "row_start": {
+            "type": "integer",
+            "title": "Row Start"
+          },
+          "row_end": {
+            "type": "integer",
+            "title": "Row End"
+          },
+          "detected_at": {
+            "type": "integer",
+            "title": "Detected At"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel_id",
+          "kind",
+          "value",
+          "reference",
+          "scale",
+          "threshold",
+          "score",
+          "row_start",
+          "row_end",
+          "detected_at"
+        ],
+        "title": "Trigger"
       },
       "ValidationError": {
         "properties": {

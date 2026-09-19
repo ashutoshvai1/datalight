@@ -8,12 +8,25 @@ class Contract(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
+class ChannelLimit(Contract):
+    minimum: float | None = Field(default=None, allow_inf_nan=False)
+    maximum: float | None = Field(default=None, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def ordered(self):
+        if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
+            raise ValueError("Minimum must not exceed maximum.")
+        return self
+
+
 class RunConfig(Contract):
     initial_rows: int = Field(default=500, ge=32, le=10000)
-    batch_rows: int = Field(default=100, ge=32, le=10000)
-    interval: float = Field(default=1, ge=0, le=60)
+    batch_rows: int = Field(default=100, ge=1, le=10000)
+    interval: float = Field(default=10, ge=0, le=3600)
     threshold: float = Field(default=6, gt=0, le=100)
-    analysis_version: str = "foundation-v1"
+    analysis_version: str = "monitor-v2"
+    path: str | None = None
+    limits: dict[str, ChannelLimit] = Field(default_factory=dict)
 
 
 class RunView(Contract):
@@ -42,6 +55,32 @@ class SystemView(Contract):
     model_status: str
 
 
+class ReferenceMetric(Contract):
+    median: float
+    scale: float
+    count: int
+
+
+class PredictionMetrics(Contract):
+    lookback: int = 10
+    horizon: int = 5
+    forecasts: int = 0
+    mae: float | None = None
+    slope_mean: float | None = None
+    slope_std: float | None = None
+    abrupt: ReferenceMetric | None = None
+    drift: ReferenceMetric | None = None
+    level: ReferenceMetric | None = None
+    hold_threshold: int = 20
+    constant: bool = False
+
+
+class ChannelExplanation(Contract):
+    channel_id: str
+    text: str
+    evidence_ids: list[str]
+
+
 class ChannelProfile(Contract):
     id: str
     name: str
@@ -64,6 +103,43 @@ class ChannelProfile(Contract):
     hold_max: int
     usable: bool
     evidence_id: str
+
+
+class Trigger(Contract):
+    channel_id: str
+    kind: Literal["abrupt", "drift", "level"]
+    value: float
+    reference: float
+    scale: float
+    threshold: float
+    score: float
+    row_start: int
+    row_end: int
+    detected_at: int
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class Coverage(Contract):
+    assessed: int
+    total: int
+    limited: bool
+    message: str
+
+
+class ForecastError(Contract):
+    mae: float | None
+    forecast_errors: int
+
+
+class Decision(Contract):
+    status: Literal["OK", "Fault Suspected"]
+    explanation: str
+    coverage: Coverage
+    triggers: list[Trigger]
+    quality_warnings: list[str]
+    forecast_errors: dict[str, ForecastError] = Field(default_factory=dict)
+    row_start: int
+    row_end: int
 
 
 class Correlation(Contract):
@@ -99,6 +175,8 @@ class ReportView(Contract):
     interpretation_status: str
     interpretation_message: str
     reference_version: str
+    predictions: dict[str, PredictionMetrics] = Field(default_factory=dict)
+    explanations: list[ChannelExplanation] = Field(default_factory=list)
 
 
 class BatchView(Contract):
@@ -123,6 +201,47 @@ class FindingView(Contract):
     channel_ids: list[str]
     evidence_ids: list[str]
     details: dict[str, Any]
+    created_at: datetime
+
+
+class DecisionView(Contract):
+    id: str
+    batch_index: int
+    decision: Decision
+    effective_status: Literal["OK", "Fault Suspected"]
+    human_assessment: str | None
+    created_at: datetime
+
+
+class SourceChoice(Contract):
+    path: str
+    name: str
+
+
+class SourcePreview(Contract):
+    path: str
+    channels: list[str]
+
+
+class TracePoint(Contract):
+    row: int
+    sequence: int
+    value: float | None
+    forecast: float | None
+
+
+class TraceView(Contract):
+    channel_id: str
+    points: list[TracePoint]
+    flagged: list[Trigger]
+
+
+class AnswerView(Contract):
+    id: str
+    review_id: str
+    status: str
+    text: str
+    evidence_ids: list[str]
     created_at: datetime
 
 

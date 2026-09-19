@@ -60,7 +60,7 @@ def main():
 
     threads = [
         threading.Thread(target=loop, args=(kind,), name=kind, daemon=True)
-        for kind in ("replay", "interpretation", "finding_interpretation")
+        for kind in ("replay", "interpretation", "question")
     ]
     for thread in threads:
         thread.start()

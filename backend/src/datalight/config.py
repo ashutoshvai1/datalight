@@ -10,9 +10,10 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://datalight:datalight@localhost:5432/datalight"
     data_path: Path = Path("/data/input.csv")
+    data_dir: Path | None = None
     initial_rows: int = Field(default=500, ge=32, le=10000)
     batch_rows: int = Field(default=100, ge=32, le=10000)
-    batch_interval: float = Field(default=1, ge=0, le=60)
+    batch_interval: float = Field(default=10, ge=0, le=3600)
     deviation_threshold: float = Field(default=6, gt=0, le=100)
     llm_enabled: bool = False
     llm_endpoint: str = (

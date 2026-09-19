@@ -1,165 +1,119 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Sparkles } from "lucide-react";
-import {
-  api,
-  type Audit,
-  type Finding,
-  type ModelCall,
-  type PageProps,
-} from "../api";
-import { Badge, Empty, ErrorNotice, FindingCard } from "../components";
+import { api, type Finding, type Review, type PageProps } from "../api";
+import { Empty, ErrorNotice } from "../components";
+import DecisionCard, { type BatchDecision } from "../DecisionCard";
 
-export default function DecisionLog({ run, showEvidence }: PageProps) {
+function HistoricalFinding({ finding }: { finding: Finding }) {
+  const [open, setOpen] = useState(false);
+  const reviews = useQuery({
+    queryKey: ["reviews", finding.id],
+    queryFn: () => api<Review[]>(`/findings/${finding.id}/reviews`),
+    enabled: open,
+  });
+  return (
+    <section className="panel">
+      <h3>{finding.title}</h3>
+      <p>{finding.explanation}</p>
+      <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary>Original review history</summary>
+        <ErrorNotice error={reviews.error} />
+        {reviews.data?.length ? (
+          reviews.data.map((r) => (
+            <div className="review-history" key={r.id}>
+              <strong>
+                {r.operator} · {r.action}
+              </strong>
+              <time>{new Date(r.created_at).toLocaleString()}</time>
+              <p>{r.reason}</p>
+              {r.replacement && <p>Human assessment: {r.replacement}</p>}
+            </div>
+          ))
+        ) : (
+          <p>No reviews recorded.</p>
+        )}
+      </details>
+    </section>
+  );
+}
+
+export default function DecisionLog({ run, report, showEvidence }: PageProps) {
   const [offset, setOffset] = useState(0);
-  const [category, setCategory] = useState("");
-  const [before, setBefore] = useState<number | undefined>();
-  const findings = useQuery({
-    queryKey: ["findings", run.id, "log", offset, category],
+  const legacy = run.config.analysis_version !== "monitor-v2";
+  const oldFindings = useQuery({
+    queryKey: ["historical-findings", run.id, offset],
     queryFn: () =>
-      api<Finding[]>(
-        `/runs/${run.id}/findings?offset=${offset}&limit=50&category=${category}`,
-      ),
+      api<Finding[]>(`/runs/${run.id}/findings?offset=${offset}&limit=20`),
+    enabled: legacy,
   });
-  const audit = useQuery({
-    queryKey: ["audit", run.id, before],
+  const query = useQuery({
+    queryKey: ["decisions", run.id, offset],
     queryFn: () =>
-      api<Audit[]>(
-        `/runs/${run.id}/audit?limit=50${before ? `&before=${before}` : ""}`,
+      api<BatchDecision[]>(
+        `/runs/${run.id}/decisions?offset=${offset}&limit=20`,
       ),
+    refetchInterval: 3000,
+    enabled: !legacy,
   });
-  const calls = useQuery({
-    queryKey: ["model-calls", run.id],
-    queryFn: () => api<ModelCall[]>(`/runs/${run.id}/model-calls`),
-  });
+  const names = Object.fromEntries(
+    report?.profiles.map((p) => [p.id, p.name]) ?? [],
+  );
   return (
     <>
       <div className="page-heading">
         <div>
           <span className="eyebrow">03 / REVIEW</span>
-          <h1>Every conclusion has a history.</h1>
+          <h1>Decision log</h1>
           <p>
-            Inspect the evidence, question an inference, or record a correction.
+            Automated decisions, supporting evidence, and your review history.
           </p>
         </div>
-        <Badge>Append-only review history</Badge>
       </div>
-      <div className="section-heading">
-        <div>
-          <h2>Conclusions & human review</h2>
-          <p>Original findings remain intact after every review.</p>
-        </div>
-        <select
-          aria-label="Finding category"
-          value={category}
-          onChange={(e) => {
-            setCategory(e.target.value);
-            setOffset(0);
-          }}
-        >
-          <option value="">All categories</option>
-          {["assumption", "quality", "deviation", "interpretation"].map((c) => (
-            <option key={c}>{c}</option>
+      <ErrorNotice error={query.error || oldFindings.error} />
+      {legacy && (
+        <>
+          <p>
+            Historical findings and reviews are read-only. Start a new analysis
+            for batch decisions.
+          </p>
+          {oldFindings.data?.map((finding) => (
+            <HistoricalFinding key={finding.id} finding={finding} />
           ))}
-        </select>
-      </div>
-      <ErrorNotice error={findings.error} />
-      {findings.data?.length ? (
-        findings.data.map((f) => (
-          <FindingCard key={f.id} finding={f} showEvidence={showEvidence} />
-        ))
-      ) : (
-        <Empty title="No conclusions in this view">
-          The initial reference and subsequent findings appear here as analysis
-          progresses.
-        </Empty>
+        </>
       )}
+      {!legacy &&
+        (query.data?.length ? (
+          query.data.map((item) => (
+            <DecisionCard
+              key={item.id}
+              item={item}
+              names={names}
+              showEvidence={showEvidence}
+            />
+          ))
+        ) : (
+          <Empty title="No batch decisions">
+            New monitoring decisions appear here. Historical reports remain
+            available in Understanding.
+          </Empty>
+        ))}
       <div className="pagination">
         <button
           disabled={!offset}
-          onClick={() => setOffset(Math.max(0, offset - 50))}
+          onClick={() => setOffset(Math.max(0, offset - 20))}
         >
           Previous
         </button>
-        <span>Page {offset / 50 + 1}</span>
+        <span>Page {offset / 20 + 1}</span>
         <button
-          disabled={findings.data?.length !== 50}
-          onClick={() => setOffset(offset + 50)}
+          disabled={
+            (legacy ? oldFindings.data?.length : query.data?.length) !== 20
+          }
+          onClick={() => setOffset(offset + 20)}
         >
           Next
         </button>
       </div>
-      <section className="panel">
-        <div className="section-heading">
-          <div>
-            <h2>Model data-flow record</h2>
-            <p>
-              Inspect exactly which derived summaries were sent, to which
-              endpoint, and why.
-            </p>
-          </div>
-          <Sparkles size={18} />
-        </div>
-        <ErrorNotice error={calls.error} />
-        {calls.data?.length ? (
-          calls.data.map((call) => (
-            <details className="model-call" key={call.id}>
-              <summary>
-                {call.model} <Badge>{call.status}</Badge>
-              </summary>
-              <p className="break">{call.endpoint}</p>
-              <p>
-                Purpose: {call.purpose} ·{" "}
-                {new Date(call.started_at).toLocaleString()}
-              </p>
-              {call.error && <div className="notice amber">{call.error}</div>}
-              <h4>Outgoing request (authorization omitted)</h4>
-              <pre>{JSON.stringify(call.request, null, 2)}</pre>
-              <h4>Response</h4>
-              <pre>{JSON.stringify(call.response, null, 2)}</pre>
-            </details>
-          ))
-        ) : (
-          <p className="muted">
-            No model requests have been made for this run. Statistical analysis
-            does not require a model connection.
-          </p>
-        )}
-      </section>
-      <section className="panel">
-        <div className="section-heading">
-          <div>
-            <h2>Processing ledger</h2>
-            <p>
-              Durable events link analysis, replay controls, and human reviews.
-            </p>
-          </div>
-        </div>
-        <ErrorNotice error={audit.error} />
-        <div className="ledger">
-          {audit.data?.map((e) => (
-            <details key={e.id}>
-              <summary>
-                <span className="mono">#{e.id}</span>
-                <strong>{e.kind}</strong>
-                <time>{new Date(e.created_at).toLocaleTimeString()}</time>
-              </summary>
-              <pre>{JSON.stringify(e.payload, null, 2)}</pre>
-            </details>
-          ))}
-        </div>
-        <div className="pagination">
-          <button onClick={() => setBefore(undefined)} disabled={!before}>
-            Latest
-          </button>
-          <button
-            disabled={audit.data?.length !== 50}
-            onClick={() => setBefore(audit.data?.at(-1)?.id)}
-          >
-            Older events
-          </button>
-        </div>
-      </section>
     </>
   );
 }

@@ -6,10 +6,11 @@ x-backend: &backend
     dockerfile: backend/Dockerfile
   environment: &backend-env
     DATABASE_URL: postgresql+psycopg://datalight:datalight@db:5432/datalight
-    DATA_PATH: /data/input.csv
+    DATA_DIR: /data
+    DATA_PATH: /data/demo.csv
     INITIAL_ROWS: ${INITIAL_ROWS:-500}
     BATCH_ROWS: ${BATCH_ROWS:-100}
-    BATCH_INTERVAL: ${BATCH_INTERVAL:-1}
+    BATCH_INTERVAL: ${BATCH_INTERVAL:-10}
     DEVIATION_THRESHOLD: ${DEVIATION_THRESHOLD:-6}
     LLM_ENABLED: ${LLM_ENABLED:-false}
     LLM_ENDPOINT: ${LLM_ENDPOINT:-https://containers.datacrunch.io/data-sovereignty-mistral-large-3/v1/chat/completions}
@@ -18,8 +19,8 @@ x-backend: &backend
     LLM_TIMEOUT: ${LLM_TIMEOUT:-30}
   volumes:
     - type: bind
-      source: ${CSV_PATH:?Set CSV_PATH to a readable CSV file}
-      target: /data/input.csv
+      source: ${DATA_DIR:-./tests/fixtures}
+      target: /data
       read_only: true
       bind:
         create_host_path: false
