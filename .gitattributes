@@ -1,0 +1,2 @@
+# Preserve CSV record bytes across checkouts; CRLF is the fixture writer's format.
+tests/fixtures/*.csv -text whitespace=cr-at-eol

@@ -1,0 +1,21 @@
+# Local datasets; only intentionally small synthetic fixtures are tracked.
+*.csv
+!tests/fixtures/*.csv
+.env
+.env.*
+!.env.example
+.venv/
+node_modules/
+dist/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage/
+test-results/
+playwright-report/
+runtime/
+*.log
+*.tsbuildinfo
+.DS_Store

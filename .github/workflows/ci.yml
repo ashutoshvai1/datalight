@@ -1,0 +1,69 @@
+name: Foundation checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: datalight
+          POSTGRES_PASSWORD: datalight
+          POSTGRES_DB: datalight
+        ports: ['5433:5432']
+        options: --health-cmd "pg_isready -U datalight" --health-interval 2s --health-retries 30
+    env:
+      DATABASE_URL: postgresql+psycopg://datalight:datalight@localhost:5433/datalight
+      TEST_DATABASE_URL: postgresql+psycopg://datalight:datalight@localhost:5433/datalight
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: make install
+      - run: make check
+      - run: make test-postgres
+      - run: make types && git diff --exit-code -- apps/web/openapi.json apps/web/src/generated/api.ts
+  browser:
+    runs-on: ubuntu-latest
+    env:
+      CSV_PATH: ./tests/fixtures/demo.csv
+      COMPOSE_PROJECT_NAME: datalight-ci
+      LLM_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: pnpm --dir apps/web install --frozen-lockfile
+      - run: cd apps/web && pnpm exec playwright install --with-deps chromium
+      - run: docker compose up --build -d --wait --wait-timeout 180
+      - run: make test-browser
+      - run: make smoke-restart
+      - if: failure()
+        run: docker compose logs --tail=100 api worker
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-results
+          path: apps/web/test-results
+      - if: always()
+        run: docker compose down

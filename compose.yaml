@@ -1,0 +1,95 @@
+name: datalight
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  environment: &backend-env
+    DATABASE_URL: postgresql+psycopg://datalight:datalight@db:5432/datalight
+    DATA_PATH: /data/input.csv
+    INITIAL_ROWS: ${INITIAL_ROWS:-500}
+    BATCH_ROWS: ${BATCH_ROWS:-100}
+    BATCH_INTERVAL: ${BATCH_INTERVAL:-1}
+    DEVIATION_THRESHOLD: ${DEVIATION_THRESHOLD:-6}
+    LLM_ENABLED: ${LLM_ENABLED:-false}
+    LLM_ENDPOINT: ${LLM_ENDPOINT:-https://containers.datacrunch.io/data-sovereignty-mistral-large-3/v1/chat/completions}
+    LLM_MODEL: ${LLM_MODEL:-mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4}
+    LLM_API_KEY: ${LLM_API_KEY:-}
+    LLM_TIMEOUT: ${LLM_TIMEOUT:-30}
+  volumes:
+    - type: bind
+      source: ${CSV_PATH:?Set CSV_PATH to a readable CSV file}
+      target: /data/input.csv
+      read_only: true
+      bind:
+        create_host_path: false
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: datalight
+      POSTGRES_PASSWORD: datalight
+      POSTGRES_DB: datalight
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U datalight -d datalight"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    command: [alembic, upgrade, head]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *backend
+    command: [uvicorn, datalight.api:app, --host, 0.0.0.0, --port, "8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  worker:
+    <<: *backend
+    command: [python, -m, datalight.worker]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import os,time; assert time.time()-os.path.getmtime('/tmp/datalight-worker-heartbeat') < 20"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    stop_grace_period: 45s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1/]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  database:
