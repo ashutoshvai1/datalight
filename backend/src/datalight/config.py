@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://datalight:datalight@localhost:5432/datalight"
     data_path: Path = Path("/data/input.csv")
     data_dir: Path | None = None
+    upload_dir: Path = Path("/uploads")
+    max_upload_bytes: int = Field(default=256 * 1024 * 1024, ge=1)
     initial_rows: int = Field(default=500, ge=32, le=10000)
     batch_rows: int = Field(default=100, ge=32, le=10000)
     batch_interval: float = Field(default=10, ge=0, le=3600)

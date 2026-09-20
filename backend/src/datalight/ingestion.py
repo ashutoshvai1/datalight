@@ -114,13 +114,19 @@ def read_window(
     previous_sample: float | None = None,
     sequence: int = 0,
     split_sequences: bool = True,
+    reader_mode: str = "legacy",
 ) -> Window:
     with path.open("rb") as f:
         names = header(f)
         kept = [i for i, n in enumerate(names) if n.strip().casefold() not in EXCLUDED]
         safe_names = [names[i] for i in kept]
         sample_index = next(
-            (i for i, n in enumerate(safe_names) if n.strip().casefold() == "sample"), None
+            (
+                i
+                for i, n in enumerate(safe_names)
+                if reader_mode == "legacy" and n.strip().casefold() == "sample"
+            ),
+            None,
         )
         if cursor:
             f.seek(cursor)

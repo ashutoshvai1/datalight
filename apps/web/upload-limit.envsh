@@ -1,0 +1,6 @@
+#!/bin/sh
+# Nginx includes multipart framing; the backend enforces the exact file limit.
+case "$MAX_UPLOAD_BYTES" in
+  ''|*[!0-9]*) echo "MAX_UPLOAD_BYTES must be a positive integer" >&2; exit 1 ;;
+esac
+export NGINX_UPLOAD_LIMIT="$((MAX_UPLOAD_BYTES + 1048576))"

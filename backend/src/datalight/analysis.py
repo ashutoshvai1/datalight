@@ -36,7 +36,7 @@ def classify(window: Window) -> tuple[list[Column], list[tuple[str, str]]]:
     ]
     channels: list[tuple[str, str]] = []
     for index, name in enumerate(window.header):
-        if index == window.sample_index:
+        if index == window.sample_index or name.strip().casefold() == "sample":
             columns.append(
                 Column(name=name, role="sequence", reason="Ordering only, not a detector feature.")
             )

@@ -1,19 +1,21 @@
 import asyncio
 import json
+from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from . import analysis, providers, rules, service, sources, temporal
 from . import models as m
-from . import providers, service, sources, temporal
 from . import schemas as s
 from .analysis import safe as analysis_safe
 from .config import Settings
 from .db import connect, now
-from .ingestion import SourceError, finite, read_window
+from .ingestion import SourceError, Window, finite, read_window
 
 
 def create_app(settings: Settings | None = None, session_factory=None) -> FastAPI:
@@ -65,10 +67,61 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
     def source_choices():
         return sources.choices(settings)
 
-    @app.get("/api/v1/sources/preview", response_model=s.SourcePreview)
-    def source_preview(path: str):
+    @app.post("/api/v1/sources/upload", response_model=s.SourceView, status_code=201)
+    async def upload_source(session: DB, file: Annotated[UploadFile, File()]):
+        name = Path((file.filename or "upload.csv").replace("\\", "/")).name
+        if not name.lower().endswith(".csv"):
+            raise HTTPException(422, "Choose a CSV file.")
+        settings.upload_dir.mkdir(parents=True, exist_ok=True)
+        destination = settings.upload_dir / f"{uuid4()}.csv"
+        temporary = destination.with_suffix(".part")
+        committed = False
         try:
-            return sources.preview(settings, path)
+            size = 0
+            with temporary.open("xb") as handle:
+                while chunk := await file.read(1024 * 1024):
+                    size += len(chunk)
+                    if size > settings.max_upload_bytes:
+                        raise HTTPException(413, "CSV exceeds the configured upload size limit.")
+                    handle.write(chunk)
+            window = read_window(temporary, 0, 100, reader_mode="rows")
+            if not window.rows:
+                raise SourceError("CSV has no observations.")
+            if not analysis.classify(window)[1]:
+                raise SourceError("No numeric channels found in the uploaded CSV preview.")
+            temporary.replace(destination)
+            source = service.register_source(session, settings, str(destination))
+            source.name = name[:255]
+            session.commit()
+            committed = True
+            return source
+        except (SourceError, OSError) as exc:
+            raise HTTPException(
+                422,
+                str(exc) if isinstance(exc, SourceError) else "CSV could not be stored locally.",
+            ) from exc
+        finally:
+            await file.close()
+            temporary.unlink(missing_ok=True)
+            if not committed:
+                destination.unlink(missing_ok=True)
+
+    @app.get("/api/v1/sources/preview", response_model=s.SourcePreview)
+    def source_preview(session: DB, path: str | None = None, source_id: str | None = None):
+        try:
+            if source_id:
+                source = session.get(m.Source, source_id)
+                if source is None:
+                    raise HTTPException(404, "Source not found")
+                path = str(service.source_path(source, settings))
+            if not path:
+                raise SourceError("Choose a CSV file.")
+            mode = (
+                "rows"
+                if sources.resolve(settings, path).is_relative_to(settings.upload_dir.resolve())
+                else "legacy"
+            )
+            return sources.preview(settings, path, mode)
         except SourceError as exc:
             raise HTTPException(422, str(exc)) from exc
 
@@ -122,16 +175,51 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         ).all()
 
     @app.get("/api/v1/runs/{run_id}/trace", response_model=s.TraceView)
-    def trace(run_id: str, channel_id: str, session: DB, limit: int = Query(1000, ge=1, le=1000)):
+    def trace(
+        run_id: str,
+        channel_id: str,
+        session: DB,
+        limit: int = Query(1000, ge=1, le=1000),
+        end_batch: int | None = Query(None, ge=0),
+        batch_window: int | None = Query(None, ge=1, le=3),
+    ):
         run = get_run(session, run_id)
         if not run.report:
             return dict(channel_id=channel_id, points=[], flagged=[])
         profile = next((p for p in run.report["profiles"] if p["id"] == channel_id), None)
         if profile is None:
             raise HTTPException(404, "Channel not found")
+        config = s.RunConfig.model_validate(run.config)
+        if channel_id in config.excluded_channel_ids:
+            raise HTTPException(422, "This channel is excluded from monitoring.")
         try:
             path = service.source_path(session.get(m.Source, run.source_id), settings)
-            first = max(1, run.rows_processed - limit + 1)
+            latest = session.scalar(
+                select(m.Batch)
+                .where(m.Batch.run_id == run.id)
+                .order_by(m.Batch.index.desc())
+                .limit(1)
+            )
+            if latest is None:
+                return dict(channel_id=channel_id, points=[], flagged=[])
+            last_index = latest.index if end_batch is None else end_batch
+            last = session.scalar(
+                select(m.Batch).where(m.Batch.run_id == run.id, m.Batch.index == last_index)
+            )
+            if last is None:
+                raise HTTPException(404, "Batch not found")
+            if batch_window is not None or end_batch is not None:
+                selected = session.scalars(
+                    select(m.Batch)
+                    .where(m.Batch.run_id == run.id, m.Batch.index <= last.index)
+                    .order_by(m.Batch.index.desc())
+                    .limit(batch_window or 3)
+                ).all()
+                first = selected[-1].row_start
+                start_batch = selected[-1].index
+            else:
+                first = max(1, last.row_end - limit + 1)
+                start_batch = None
             context_start = max(1, first - temporal.HISTORY)
             batch = session.scalar(
                 select(m.Batch)
@@ -141,28 +229,61 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
             )
             if batch is None:
                 return dict(channel_id=channel_id, points=[], flagged=[])
-            # At most one configured batch plus chart context is read, never the full source.
-            window = read_window(
-                path,
+            # Read bounded source chunks and retain just chart channel/order context.
+            cursor, remaining, sequence, previous = (
                 batch.summary["start_offset"],
-                run.rows_processed - batch.row_start + 1,
-                sequence=batch.summary.get("start_sequence", batch.sequence),
-                split_sequences=False,
+                last.row_end - batch.row_start + 1,
+                batch.summary.get("start_sequence", batch.sequence),
+                None,
             )
-            config = s.RunConfig.model_validate(run.config)
+            compact = None
+            while remaining > 0:
+                chunk = read_window(
+                    path,
+                    cursor,
+                    min(remaining, 10000),
+                    previous,
+                    sequence,
+                    split_sequences=False,
+                    reader_mode=config.reader_mode,
+                )
+                if not chunk.rows:
+                    break
+                selected_indexes = [chunk.header.index(profile["name"])]
+                if chunk.sample_index is not None and chunk.sample_index not in selected_indexes:
+                    selected_indexes.append(chunk.sample_index)
+                if compact is None:
+                    compact = Window(
+                        [chunk.header[i] for i in selected_indexes],
+                        [],
+                        [],
+                        0,
+                        0,
+                        None,
+                        False,
+                        sample_index=selected_indexes.index(chunk.sample_index)
+                        if chunk.sample_index is not None
+                        else None,
+                    )
+                compact.rows.extend([[row[i] for i in selected_indexes] for row in chunk.rows])
+                compact.segments.extend(chunk.segments)
+                compact.invalid_records.extend(chunk.invalid_records)
+                cursor, previous, sequence = chunk.cursor, chunk.last_sample, chunk.sequence
+                remaining -= len(chunk.rows)
+            if compact is None:
+                return dict(channel_id=channel_id, points=[], flagged=[])
             values, segments, _ = temporal.vectors(
-                window, profile["name"], config.limits.get(profile["name"])
+                compact, profile["name"], config.limits.get(profile["name"])
             )
             forecasts = temporal.features(values, segments)["forecast"]
-            index = window.header.index(profile["name"])
             points = [
                 dict(
                     row=batch.row_start + i,
                     sequence=int(segments[i]),
-                    value=finite(row[index]),
+                    value=finite(row[0]),
                     forecast=analysis_safe(forecasts[i]),
                 )
-                for i, row in enumerate(window.rows)
+                for i, row in enumerate(compact.rows)
                 if batch.row_start + i >= first
             ]
             findings = session.scalars(
@@ -170,15 +291,27 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
                     m.Finding.run_id == run.id,
                     m.Finding.category == "decision",
                     m.Finding.batch_index >= batch.index,
+                    m.Finding.batch_index <= last.index,
                 )
             ).all()
             flagged = [
                 t
-                for f in findings
-                for t in f.details["triggers"]
-                if t["channel_id"] == channel_id and t["row_end"] >= first
+                for finding in findings
+                for t in finding.details["triggers"]
+                if t["channel_id"] == channel_id
+                and t["row_end"] >= first
+                and t["row_start"] <= last.row_end
             ]
-            return dict(channel_id=channel_id, points=points, flagged=flagged)
+            return dict(
+                channel_id=channel_id,
+                points=points,
+                flagged=flagged,
+                start_batch=start_batch if start_batch is not None else batch.index,
+                end_batch=last.index,
+                latest_batch=latest.index,
+                row_start=first,
+                row_end=last.row_end,
+            )
         except SourceError as exc:
             raise HTTPException(409, str(exc)) from exc
 
@@ -192,13 +325,32 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
     def new_run(config: s.RunConfig, session: DB):
         service.coordination_lock(session)
         try:
-            source = service.register_source(session, settings, config.path)
+            if config.source_id:
+                source = session.get(m.Source, config.source_id)
+                if source is None:
+                    raise HTTPException(404, "Source not found")
+                source_path = service.source_path(source, settings)
+            else:
+                source = service.register_source(session, settings, config.path)
+                source_path = sources.resolve(settings, source.path)
+
         except SourceError as exc:
             raise HTTPException(422, str(exc)) from exc
-        preview = sources.preview(settings, source.path)
+        mode = "rows" if source_path.is_relative_to(settings.upload_dir.resolve()) else "legacy"
+        preview = sources.preview(settings, source.path, mode)
         if set(config.limits) - set(preview["channels"]):
             raise HTTPException(422, "Limits must refer to numeric channels in the selected file.")
-        config = config.model_copy(update={"analysis_version": "monitor-v2", "threshold": 6})
+        config = config.model_copy(
+            update={
+                "analysis_version": "monitor-v2",
+                "threshold": 6,
+                "reader_mode": mode,
+                "source_id": source.id,
+                "excluded_channel_ids": [],
+                "rules": [],
+                "monitoring_locked": False,
+            }
+        )
         for old in session.scalars(
             select(m.Run)
             .where(m.Run.status.in_(["initializing", "running", "paused"]))
@@ -230,7 +382,13 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         if body.action == "pause":
             run.status = "paused"
         elif body.action == "resume":
-            run.status = "running" if run.report else "initializing"
+            if not run.report:
+                raise HTTPException(
+                    409, "Wait for initial understanding before starting monitoring."
+                )
+            config = s.RunConfig.model_validate(run.config)
+            run.config = config.model_copy(update={"monitoring_locked": True}).model_dump()
+            run.status = "running"
         else:
             run.fast_forward = body.action == "fast_forward"
         for job in session.scalars(
@@ -238,6 +396,118 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         ):
             job.available_at = now()
         service.event(session, run.id, "run.control", {"action": body.action})
+        session.commit()
+        return run
+
+    def editable_run(session, run_id):
+        run = session.scalar(select(m.Run).where(m.Run.id == run_id).with_for_update())
+        if not run:
+            raise HTTPException(404, "Run not found")
+        try:
+            return run, rules.editable(run)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/api/v1/runs/{run_id}/monitoring-config", response_model=s.RunView)
+    def monitoring_config(run_id: str, body: s.MonitoringConfig, session: DB):
+        run, config = editable_run(session, run_id)
+        known = {p["id"] for p in run.report["profiles"]}
+        excluded = set(body.excluded_channel_ids)
+        if excluded - known or not known - excluded:
+            raise HTTPException(422, "Keep at least one known numeric channel for monitoring.")
+        if set(body.rule_ids) - {rule.id for rule in config.rules}:
+            raise HTTPException(422, "Only already applied rules can be retained.")
+        kept = [rule for rule in config.rules if rule.id in body.rule_ids]
+        if any(rule.channel_id in excluded for rule in kept):
+            raise HTTPException(422, "Remove rules for excluded channels before saving.")
+        run.config = config.model_copy(
+            update={"excluded_channel_ids": sorted(excluded), "rules": kept}
+        ).model_dump()
+        service.event(
+            session,
+            run.id,
+            "monitoring.configured",
+            {"excluded_channel_ids": sorted(excluded), "rule_ids": body.rule_ids},
+        )
+        session.commit()
+        return run
+
+    @app.post(
+        "/api/v1/runs/{run_id}/rule-proposals", response_model=s.RuleProposalView, status_code=201
+    )
+    def new_rule_proposal(run_id: str, body: s.RuleProposalCreate, session: DB):
+        run, config = editable_run(session, run_id)
+        report = s.ReportView.model_validate(run.report)
+        if not body.request.strip():
+            raise HTTPException(422, "Describe a monitoring rule.")
+        try:
+            # Reject non-monitorable header references locally before model egress.
+            import re
+
+            allowed = rules.eligible(run, config)
+            forbidden = [column.name for column in report.columns if column.role != "numeric"] + [
+                p.name for p in report.profiles if p.id not in allowed
+            ]
+            if any(
+                re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", body.request, re.IGNORECASE)
+                for name in forbidden
+            ):
+                raise ValueError("Rules must refer to included numeric channels.")
+            request = providers.question_text(body.request, report, settings)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        proposal_id = str(uuid4())
+        unavailable = settings.interpretation_unavailable
+        result = s.RuleProposalView(
+            id=proposal_id,
+            status="unavailable" if unavailable else "pending",
+            message=unavailable or "",
+        )
+        payload = {
+            "request": rules.RuleProposalPayload(
+                request=request, available_channel_ids=sorted(allowed)
+            ).model_dump()
+        }
+        if unavailable:
+            payload["result"] = result.model_dump()
+        session.add(
+            m.Job(
+                run_id=run.id,
+                kind="rule_proposal",
+                task_key=proposal_id,
+                payload=payload,
+                status="done" if unavailable else "queued",
+            )
+        )
+        service.event(session, run.id, "rule.requested", {"proposal_id": proposal_id})
+        session.commit()
+        return result
+
+    @app.get(
+        "/api/v1/runs/{run_id}/rule-proposals/{proposal_id}", response_model=s.RuleProposalView
+    )
+    def rule_proposal(run_id: str, proposal_id: str, session: DB):
+        get_run(session, run_id)
+        result = rules.view(session, run_id, proposal_id)
+        if result is None:
+            raise HTTPException(404, "Rule proposal not found")
+        return result
+
+    @app.post("/api/v1/runs/{run_id}/rule-proposals/{proposal_id}/apply", response_model=s.RunView)
+    def apply_rule(run_id: str, proposal_id: str, session: DB):
+        run, config = editable_run(session, run_id)
+        proposal = rules.view(session, run_id, proposal_id)
+        if proposal is None:
+            raise HTTPException(404, "Rule proposal not found")
+        if proposal.status != "succeeded" or not proposal.rule:
+            raise HTTPException(409, "A successful rule proposal is required.")
+        if proposal.rule.channel_id not in rules.eligible(run, config):
+            raise HTTPException(422, "The proposed channel is no longer included.")
+        if not any(rule.id == proposal.rule.id for rule in config.rules):
+            run.config = config.model_copy(
+                update={"rules": [*config.rules, proposal.rule]}
+            ).model_dump()
+            service.event(session, run.id, "rule.applied", {"rule": proposal.rule.model_dump()})
         session.commit()
         return run
 

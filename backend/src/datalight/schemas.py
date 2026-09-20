@@ -19,6 +19,67 @@ class ChannelLimit(Contract):
         return self
 
 
+class MonitoringRule(Contract):
+    id: str
+    version: Literal[1] = 1
+    channel_id: str
+    operator: Literal["gt", "gte", "lt", "lte", "outside", "missing"]
+    threshold: float | None = Field(default=None, allow_inf_nan=False)
+    minimum: float | None = Field(default=None, allow_inf_nan=False)
+    maximum: float | None = Field(default=None, allow_inf_nan=False)
+    effect: Literal["fault", "quality_warning"] = "quality_warning"
+
+    @model_validator(mode="after")
+    def operands(self):
+        if self.operator in ("gt", "gte", "lt", "lte"):
+            if self.threshold is None or self.minimum is not None or self.maximum is not None:
+                raise ValueError("Comparison rules require only a threshold.")
+        elif self.operator == "outside":
+            if (
+                self.minimum is None
+                or self.maximum is None
+                or self.minimum > self.maximum
+                or self.threshold is not None
+            ):
+                raise ValueError("Range rules require ordered minimum and maximum bounds.")
+        elif any(v is not None for v in (self.threshold, self.minimum, self.maximum)):
+            raise ValueError("Missing-value rules do not take numeric operands.")
+        return self
+
+
+class RuleInterval(Contract):
+    row_start: int
+    row_end: int
+
+
+class RuleMatch(Contract):
+    rule_id: str
+    version: int = 1
+    channel_id: str
+    effect: Literal["fault", "quality_warning"]
+    violation_count: int
+    row_start: int
+    row_end: int
+    evidence_ids: list[str]
+    intervals: list[RuleInterval] = Field(default_factory=list)
+
+
+class MonitoringConfig(Contract):
+    excluded_channel_ids: list[str] = Field(default_factory=list)
+    rule_ids: list[str] = Field(default_factory=list)
+
+
+class RuleProposalCreate(Contract):
+    request: str = Field(min_length=1, max_length=4000)
+
+
+class RuleProposalView(Contract):
+    id: str
+    status: str
+    rule: MonitoringRule | None = None
+    message: str = ""
+
+
 class RunConfig(Contract):
     initial_rows: int = Field(default=500, ge=32, le=10000)
     batch_rows: int = Field(default=100, ge=1, le=10000)
@@ -26,6 +87,11 @@ class RunConfig(Contract):
     threshold: float = Field(default=6, gt=0, le=100)
     analysis_version: str = "monitor-v2"
     path: str | None = None
+    source_id: str | None = None
+    reader_mode: Literal["legacy", "rows"] = "legacy"
+    excluded_channel_ids: list[str] = Field(default_factory=list)
+    rules: list[MonitoringRule] = Field(default_factory=list)
+    monitoring_locked: bool = False
     limits: dict[str, ChannelLimit] = Field(default_factory=dict)
 
 
@@ -136,6 +202,7 @@ class Decision(Contract):
     explanation: str
     coverage: Coverage
     triggers: list[Trigger]
+    rule_matches: list[RuleMatch] = Field(default_factory=list)
     quality_warnings: list[str]
     forecast_errors: dict[str, ForecastError] = Field(default_factory=dict)
     row_start: int
@@ -234,6 +301,11 @@ class TraceView(Contract):
     channel_id: str
     points: list[TracePoint]
     flagged: list[Trigger]
+    start_batch: int | None = None
+    end_batch: int | None = None
+    latest_batch: int | None = None
+    row_start: int | None = None
+    row_end: int | None = None
 
 
 class AnswerView(Contract):

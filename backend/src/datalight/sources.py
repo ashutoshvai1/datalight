@@ -1,4 +1,4 @@
-"""Local source selection. Never resolve outside the configured read-only data root."""
+"""Local source selection, confined to mounted demos and persistent uploads."""
 
 from pathlib import Path
 
@@ -15,7 +15,12 @@ def resolve(settings, value=None):
     if not path.is_absolute():
         path = root(settings) / path
     path = path.resolve()
-    if not path.is_relative_to(root(settings)) or path.suffix.lower() != ".csv":
+    if (
+        not any(
+            path.is_relative_to(base) for base in (root(settings), settings.upload_dir.resolve())
+        )
+        or path.suffix.lower() != ".csv"
+    ):
         raise SourceError("Select a CSV inside the configured data directory.")
     identity(path)
     return path
@@ -28,11 +33,13 @@ def choices(settings):
     return [{"path": str(p.relative_to(base)), "name": p.stem.replace("_", " ")} for p in paths]
 
 
-def preview(settings, value):
+def preview(settings, value, reader_mode="legacy"):
     path = resolve(settings, value)
-    window = read_window(path, 0, 100)
+    window = read_window(path, 0, 100, reader_mode=reader_mode)
     _, channels = analysis.classify(window)
     return {
-        "path": str(path.relative_to(root(settings))),
+        "path": str(path.relative_to(root(settings)))
+        if path.is_relative_to(root(settings))
+        else str(path),
         "channels": [name for _, name in channels],
     }

@@ -3,7 +3,7 @@ import signal
 import threading
 from pathlib import Path
 
-from . import service
+from . import rules, service
 from .config import Settings
 from .db import connect
 from .ingestion import SourceError
@@ -39,7 +39,13 @@ def main():
                     continue
                 job_id, token = claimed
                 try:
-                    action = service.replay if kind == "replay" else service.interpret
+                    action = (
+                        service.replay
+                        if kind == "replay"
+                        else rules.propose
+                        if kind == "rule_proposal"
+                        else service.interpret
+                    )
                     action(factory, settings, job_id, token)
                 except SourceError as exc:
                     service.fail_job(factory, job_id, token, str(exc))
@@ -60,7 +66,7 @@ def main():
 
     threads = [
         threading.Thread(target=loop, args=(kind,), name=kind, daemon=True)
-        for kind in ("replay", "interpretation", "question")
+        for kind in ("replay", "interpretation", "question", "rule_proposal")
     ]
     for thread in threads:
         thread.start()

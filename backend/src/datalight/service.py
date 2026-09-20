@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from sqlalchemy import and_, or_, select, text
 
-from . import analysis, providers, sources, temporal
+from . import analysis, providers, rules, sources, temporal
 from . import models as m
 from .db import now
 from .ingestion import SourceError, fingerprint, identity, read_window
@@ -87,7 +87,7 @@ def claim(factory, kind: str) -> tuple[str, str] | None:
         return job.id, token
 
 
-def context_window(path, window, state):
+def context_window(path, window, state, reader_mode="legacy"):
     history = state.get("history") if state else None
     if not history:
         return window, 0
@@ -97,6 +97,7 @@ def context_window(path, window, state):
         history["count"],
         sequence=history["sequence"],
         split_sequences=False,
+        reader_mode=reader_mode,
     )
     skip = len(prior.rows)
     prior.rows += window.rows
@@ -129,6 +130,7 @@ def replay(factory, settings, job_id, token):
             run.last_sample,
             run.sequence,
             split_sequences=not initial,
+            reader_mode=config.reader_mode,
         )
         if not window.rows:
             if initial:
@@ -144,7 +146,11 @@ def replay(factory, settings, job_id, token):
             if unknown:
                 raise SourceError("A configured limit does not match a numeric channel.")
         else:
-            channels = [(p["id"], p["name"]) for p in run.report["profiles"]]
+            channels = [
+                (p["id"], p["name"])
+                for p in run.report["profiles"]
+                if p["id"] not in config.excluded_channel_ids
+            ]
         current, vectors = analysis.profiles(window, channels, prefix)
         checks, trust = analysis.quality(window, current, prefix)
         checks = [
@@ -154,7 +160,7 @@ def replay(factory, settings, job_id, token):
         ]
         pairs = analysis.correlations(vectors, prefix) if initial else []
         state = run.detector_state or {}
-        combined, skip = context_window(path, window, state)
+        combined, skip = context_window(path, window, state, config.reader_mode)
         if initial:
             models = temporal.baseline(window, channels, config.limits)
         else:
@@ -222,6 +228,29 @@ def replay(factory, settings, job_id, token):
                 )
             )
         quality_warnings = [f"{c.name}: {c.explanation}" for c in checks if c.status == "fail"]
+        rule_matches = (
+            []
+            if initial
+            else rules.evaluate(window, channels, config.rules, prefix, run.rows_processed + 1)
+        )
+        rule_lookup = {rule.id: rule for rule in config.rules}
+        for match in rule_matches:
+            session.add(
+                m.Evidence(
+                    id=match.evidence_ids[0],
+                    run_id=run.id,
+                    batch_index=run.batch_index,
+                    kind="rule",
+                    details={
+                        "rule": rule_lookup[match.rule_id].model_dump(),
+                        "match": match.model_dump(),
+                    },
+                )
+            )
+            if match.effect == "quality_warning":
+                quality_warnings.append(
+                    f"User rule {match.rule_id}: {match.violation_count} observations matched."
+                )
         if initial:
             reason = settings.interpretation_unavailable
             report = ReportView(
@@ -271,13 +300,28 @@ def replay(factory, settings, job_id, token):
                 f"{names[t.channel_id]}: {t.kind} change, {t.value:.5g} versus reference {t.reference:.5g} ({t.score:.1f} scales; threshold 6)"
                 for t in strongest
             )
+            fault_rules = [match for match in rule_matches if match.effect == "fault"]
+            if fault_rules:
+                explanation = "; ".join(
+                    filter(
+                        None,
+                        [
+                            explanation,
+                            *[
+                                f"{names[match.channel_id]}: applied fault rule matched {match.violation_count} observations"
+                                for match in fault_rules
+                            ],
+                        ],
+                    )
+                )
             decision = Decision(
-                status="Fault Suspected" if triggers else "OK",
+                status="Fault Suspected" if triggers or fault_rules else "OK",
                 explanation=(explanation + ". This is a detected change, not a diagnosis.")
-                if triggers
+                if triggers or fault_rules
                 else "No process-change rule triggered.",
                 coverage=coverage,
                 triggers=triggers,
+                rule_matches=rule_matches,
                 quality_warnings=quality_warnings,
                 forecast_errors=metrics,
                 row_start=run.rows_processed + 1,
@@ -301,10 +345,13 @@ def replay(factory, settings, job_id, token):
                     title=decision.status,
                     explanation=decision.explanation,
                     confidence="measured",
-                    channel_ids=sorted({t.channel_id for t in triggers}),
+                    channel_ids=sorted(
+                        {t.channel_id for t in triggers} | {t.channel_id for t in rule_matches}
+                    ),
                     evidence_ids=[decision_evidence]
                     + [f"{prefix}:temporal:{cid}" for cid, _ in channels]
-                    + [c.evidence_id for c in checks if c.status == "fail"],
+                    + [c.evidence_id for c in checks if c.status == "fail"]
+                    + [match.evidence_ids[0] for match in rule_matches],
                     details=decision.model_dump(),
                 )
             )
@@ -368,6 +415,16 @@ def fail_job(factory, job_id: str, token: str, message: str):
         job.status = "done"
         if job.kind == "replay":
             run.status, run.error = "failed", message
+        elif job.kind == "rule_proposal":
+            job.payload = {
+                **job.payload,
+                "result": {
+                    "id": job.task_key,
+                    "status": "failed",
+                    "rule": None,
+                    "message": message,
+                },
+            }
         elif job.kind == "question":
             session.add(
                 m.Answer(
@@ -423,9 +480,10 @@ def interpret(factory, settings, job_id, token, transport=None):
                     if pair.left not in excluded and pair.right not in excluded
                 ],
             })
-            targets = sorted({t.channel_id for t in decision.triggers if t.channel_id not in excluded}) or [
-                p.id for p in report.profiles
-            ]
+            targets = sorted(
+                ({t.channel_id for t in decision.triggers}
+                 | {match.channel_id for match in decision.rule_matches}) - excluded
+            ) or [p.id for p in report.profiles]
             summary = providers.summarize(report, targets)
             selected: dict[tuple[str, str], Trigger] = {}
             for trigger in decision.triggers:
@@ -456,6 +514,16 @@ def interpret(factory, settings, job_id, token, transport=None):
                     cid: metric for cid, metric in decision.forecast_errors.items()
                     if cid not in excluded
                 },
+                rule_evidence=[
+                    providers.DerivedRuleEvidence(
+                        rule=e.details["rule"],
+                        violation_count=e.details["match"]["violation_count"],
+                        evidence_id=e.id,
+                    )
+                    for eid in finding.evidence_ids
+                    if (e := session.get(m.Evidence, eid)) and e.kind == "rule"
+                    and e.details["rule"]["channel_id"] not in excluded
+                ],
                 quality_checks=[
                     Check.model_validate(e.details)
                     for eid in finding.evidence_ids
