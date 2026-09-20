@@ -15,7 +15,7 @@ Requirements: Docker with Compose, approximately 4 GB available memory, and read
 DATA_DIR=./tests/fixtures docker compose up --build -d
 ```
 
-Open **http://localhost:8080**. Nothing is analyzed automatically. Select a CSV from the mounted directory or upload a CSV, then choose initial samples, batch size, and seconds between batches. Defaults are **500 / 100 / 10 seconds**. Optional minimum/maximum channel limits are under a collapsed setup section. Custom paths must remain inside the data directory. Uploads are stored in a separate persistent local volume; the default upload limit is 256 MiB (`UPLOAD_MAX_MIB`).
+Open **http://localhost:8080**. Nothing is analyzed automatically. Select a CSV from the mounted directory or upload a CSV, then choose initial samples, batch size, and seconds between batches. Defaults are **500 / 100 / 10 seconds**. Optional minimum/maximum channel limits are under a collapsed setup section. Custom paths must remain inside the data directory. Uploads are stored in a separate persistent local volume; the default upload limit is 256 MiB (`MAX_UPLOAD_BYTES`, default 268435456).
 
 The understanding report opens after submission. Monitoring remains paused until **Play**. Pause/resume preserves the checkpoint; EOF completes playback. Before first Play, Understanding lets you exclude numeric channels and propose additional monitoring rules. The UI contains Understanding, Monitoring, Decision log, and Docs. Docs is available before starting an analysis. Historical reports and reviews remain accessible. Old foundation analyses are readable; start a new analysis to use the new detectors.
 

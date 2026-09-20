@@ -92,7 +92,7 @@ const rules = [
   ],
   [
     "Sequence gaps, duplicates or order",
-    "When an ordering sample column is available: skipped coordinates, repeated coordinates, invalid coordinates and backward steps are warnings. A reset to sample 1 starts a new independent sequence. Temporal windows never cross these breaks.",
+    "For legacy mounted files with an ordering sample column: skipped coordinates, repeated coordinates, invalid coordinates and backward steps are warnings. A reset to sample 1 starts a new independent sequence. Temporal windows never cross these breaks.",
   ],
   [
     "Configured range",
@@ -146,9 +146,10 @@ export default function Docs() {
           are inferred from the initial window; text columns are retained in the
           schema but are not numeric detector inputs. A file needs usable
           numeric observations to support monitoring. Recognized evaluation
-          fields are excluded, and a sample coordinate supplies ordering only.
-          Datalight does not guess physical units or what a sensor controls from
-          its name.
+          fields and sample are excluded from detector inputs. Uploads use file
+          row order; mounted demo files use sample coordinates to detect
+          independent sequences. Datalight does not guess physical units or what
+          a sensor controls from its name.
         </p>
         <p>
           The initial window is provisional: it may already contain unusual
@@ -261,7 +262,8 @@ export default function Docs() {
           or rules.
         </p>
         <p>
-          Every process rule uses the fixed initial reference. Abrupt-change
+          Every built-in process rule uses the fixed initial reference. Custom
+          rules use their explicitly applied thresholds. Abrupt-change
           references use initial differences between adjacent 10-sample means;
           drift references use initial 50-sample slopes; level references use
           initial valid readings. Consecutive alarms are grouped into intervals,
@@ -326,6 +328,43 @@ export default function Docs() {
             coordinate for a grouped interval.
           </dd>
         </dl>
+        <h3>A small synthetic example</h3>
+        <pre>
+          {JSON.stringify(
+            {
+              id: "example-analysis:b3:temporal:c001",
+              run_id: "example-analysis",
+              batch_index: 3,
+              kind: "temporal",
+              details: {
+                reference_evidence_id: "example-analysis:b0:temporal:c001",
+                triggers: [
+                  {
+                    channel_id: "c001",
+                    kind: "level",
+                    value: 24,
+                    reference: 10,
+                    scale: 2,
+                    score: 7,
+                    threshold: 6,
+                    row_start: 301,
+                    row_end: 310,
+                    detected_at: 310,
+                  },
+                ],
+              },
+            },
+            null,
+            2,
+          )}
+        </pre>
+        <p>
+          This invented example says that the recent median, 24, is seven
+          reference scales above the initial median, 10. Seven exceeds the
+          threshold of six, so the level rule flagged this interval. Follow
+          reference_evidence_id to see how the original reference was
+          calculated.
+        </p>
         <p>
           Sample rows locate observations in the CSV replay. They are not
           timestamps. The local database preserves evidence, decisions, model
@@ -354,7 +393,9 @@ export default function Docs() {
           uses its evidence plus up to the latest 10 completed
           question-and-answer turns for that decision. Older turns remain in the
           local review history even when they fall outside the model’s context.
-          Only one question is processed at a time per decision.
+          Only one question is processed at a time per decision. Rule proposals
+          send only the sanitized request and eligible opaque channel IDs; no
+          observations or profile statistics are needed.
         </p>
         <p>
           Model explanations are interpretations, not verified diagnoses. Their

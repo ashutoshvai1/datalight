@@ -62,6 +62,44 @@
         }
       }
     },
+    "/api/v1/sources/upload": {
+      "post": {
+        "summary": "Upload Source",
+        "operationId": "upload_source_api_v1_sources_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_source_api_v1_sources_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sources/preview": {
       "get": {
         "summary": "Source Preview",
@@ -70,10 +108,33 @@
           {
             "name": "path",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Path"
+            }
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Id"
             }
           }
         ],
@@ -243,6 +304,41 @@
               "minimum": 1,
               "default": 1000,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "end_batch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Batch"
+            }
+          },
+          {
+            "name": "batch_window",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 3,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Batch Window"
             }
           }
         ],
@@ -427,6 +523,200 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}/monitoring-config": {
+      "post": {
+        "summary": "Monitoring Config",
+        "operationId": "monitoring_config_api_v1_runs__run_id__monitoring_config_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MonitoringConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}/rule-proposals": {
+      "post": {
+        "summary": "New Rule Proposal",
+        "operationId": "new_rule_proposal_api_v1_runs__run_id__rule_proposals_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleProposalCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleProposalView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}/rule-proposals/{proposal_id}": {
+      "get": {
+        "summary": "Rule Proposal",
+        "operationId": "rule_proposal_api_v1_runs__run_id__rule_proposals__proposal_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleProposalView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}/rule-proposals/{proposal_id}/apply": {
+      "post": {
+        "summary": "Apply Rule",
+        "operationId": "apply_rule_api_v1_runs__run_id__rule_proposals__proposal_id__apply_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Proposal Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1095,6 +1385,20 @@
         ],
         "title": "BatchView"
       },
+      "Body_upload_source_api_v1_sources_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_source_api_v1_sources_upload_post"
+      },
       "ChannelExplanation": {
         "properties": {
           "channel_id": {
@@ -1511,6 +1815,13 @@
             "type": "array",
             "title": "Triggers"
           },
+          "rule_matches": {
+            "items": {
+              "$ref": "#/components/schemas/RuleMatch"
+            },
+            "type": "array",
+            "title": "Rule Matches"
+          },
           "quality_warnings": {
             "items": {
               "type": "string"
@@ -1868,6 +2179,107 @@
         ],
         "title": "ModelCallView"
       },
+      "MonitoringConfig": {
+        "properties": {
+          "excluded_channel_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded Channel Ids"
+          },
+          "rule_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rule Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MonitoringConfig"
+      },
+      "MonitoringRule": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Version",
+            "default": 1
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "operator": {
+            "type": "string",
+            "enum": [
+              "gt",
+              "gte",
+              "lt",
+              "lte",
+              "outside",
+              "missing"
+            ],
+            "title": "Operator"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "fault",
+              "quality_warning"
+            ],
+            "title": "Effect",
+            "default": "quality_warning"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "channel_id",
+          "operator"
+        ],
+        "title": "MonitoringRule"
+      },
       "PredictionMetrics": {
         "properties": {
           "lookback": {
@@ -2085,7 +2497,8 @@
             "type": "string",
             "maxLength": 100,
             "minLength": 1,
-            "title": "Operator"
+            "title": "Operator",
+            "default": "Local user"
           },
           "reason": {
             "type": "string",
@@ -2109,8 +2522,7 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "action",
-          "operator"
+          "action"
         ],
         "title": "ReviewCreate"
       },
@@ -2129,7 +2541,8 @@
             "type": "string",
             "maxLength": 100,
             "minLength": 1,
-            "title": "Operator"
+            "title": "Operator",
+            "default": "Local user"
           },
           "reason": {
             "type": "string",
@@ -2167,12 +2580,143 @@
         "type": "object",
         "required": [
           "action",
-          "operator",
           "id",
           "finding_id",
           "created_at"
         ],
         "title": "ReviewView"
+      },
+      "RuleInterval": {
+        "properties": {
+          "row_start": {
+            "type": "integer",
+            "title": "Row Start"
+          },
+          "row_end": {
+            "type": "integer",
+            "title": "Row End"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "row_start",
+          "row_end"
+        ],
+        "title": "RuleInterval"
+      },
+      "RuleMatch": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "fault",
+              "quality_warning"
+            ],
+            "title": "Effect"
+          },
+          "violation_count": {
+            "type": "integer",
+            "title": "Violation Count"
+          },
+          "row_start": {
+            "type": "integer",
+            "title": "Row Start"
+          },
+          "row_end": {
+            "type": "integer",
+            "title": "Row End"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          },
+          "intervals": {
+            "items": {
+              "$ref": "#/components/schemas/RuleInterval"
+            },
+            "type": "array",
+            "title": "Intervals"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rule_id",
+          "channel_id",
+          "effect",
+          "violation_count",
+          "row_start",
+          "row_end",
+          "evidence_ids"
+        ],
+        "title": "RuleMatch"
+      },
+      "RuleProposalCreate": {
+        "properties": {
+          "request": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Request"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request"
+        ],
+        "title": "RuleProposalCreate"
+      },
+      "RuleProposalView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonitoringRule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "RuleProposalView"
       },
       "RunConfig": {
         "properties": {
@@ -2219,6 +2763,45 @@
               }
             ],
             "title": "Path"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "reader_mode": {
+            "type": "string",
+            "enum": [
+              "legacy",
+              "rows"
+            ],
+            "title": "Reader Mode",
+            "default": "legacy"
+          },
+          "excluded_channel_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded Channel Ids"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringRule"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "monitoring_locked": {
+            "type": "boolean",
+            "title": "Monitoring Locked",
+            "default": false
           },
           "limits": {
             "additionalProperties": {
@@ -2494,6 +3077,61 @@
             },
             "type": "array",
             "title": "Flagged"
+          },
+          "start_batch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Batch"
+          },
+          "end_batch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Batch"
+          },
+          "latest_batch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Batch"
+          },
+          "row_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Start"
+          },
+          "row_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row End"
           }
         },
         "additionalProperties": false,

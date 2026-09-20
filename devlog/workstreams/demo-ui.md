@@ -20,7 +20,7 @@ questions remain available without entering a name; source-grounded plain-langua
 Implemented expanded correlation matrix with full-pair rich-text tooltips, gray unavailable cells,
 and a static labeled color legend. Explanations, answers and custom-rule matches share numbered
 citations. Chart instances survive option updates. Monitoring defaults to three batches, includes
-a native horizontal history scrollbar with keyboard support, pins historical browsing during
+a controlled horizontal history slider with keyboard and wheel support, pins historical browsing during
 polling, and offers Latest to return to following. Excluded channels are omitted from its selector.
 
 Reviews submit without an operator name. An always-available composer inside the discussion
@@ -32,8 +32,7 @@ confirmation/locking, evidence records, privacy and ten-turn model context. Root
 
 Validation: TypeScript check, ESLint on owned TSX files and production Vite build passed in this
 worktree. Browser and integrated API checks remain with the integration owner. Existing Vite
-large-chunk warning remains. Temporary contract intersections allow checks before regenerated
-trace/rule/exclusion contracts; root may simplify them after generation.
+large-chunk warning remains. Root regenerated trace/rule/exclusion contracts and removed temporary intersections. Integrated browser checks passed; the slider prevents browser restoration from changing the default viewport.
 
 Integration: preserve root MonitoringSetup edits in Understanding and both appended CSS groups.
 No generated contract files or end-to-end workflow tests were changed.

@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sources/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Source */
+        post: operations["upload_source_api_v1_sources_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sources/preview": {
         parameters: {
             query?: never;
@@ -169,6 +186,74 @@ export interface paths {
         put?: never;
         /** Control */
         post: operations["control_api_v1_runs__run_id__control_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/monitoring-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Monitoring Config */
+        post: operations["monitoring_config_api_v1_runs__run_id__monitoring_config_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/rule-proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** New Rule Proposal */
+        post: operations["new_rule_proposal_api_v1_runs__run_id__rule_proposals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/rule-proposals/{proposal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rule Proposal */
+        get: operations["rule_proposal_api_v1_runs__run_id__rule_proposals__proposal_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/rule-proposals/{proposal_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Rule */
+        post: operations["apply_rule_api_v1_runs__run_id__rule_proposals__proposal_id__apply_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -358,6 +443,11 @@ export interface components {
              */
             created_at: string;
         };
+        /** Body_upload_source_api_v1_sources_upload_post */
+        Body_upload_source_api_v1_sources_upload_post: {
+            /** File */
+            file: string;
+        };
         /** ChannelExplanation */
         ChannelExplanation: {
             /** Channel Id */
@@ -482,6 +572,8 @@ export interface components {
             coverage: components["schemas"]["Coverage"];
             /** Triggers */
             triggers: components["schemas"]["Trigger"][];
+            /** Rule Matches */
+            rule_matches?: components["schemas"]["RuleMatch"][];
             /** Quality Warnings */
             quality_warnings: string[];
             /** Forecast Errors */
@@ -620,6 +712,43 @@ export interface components {
             /** Completed At */
             completed_at: string | null;
         };
+        /** MonitoringConfig */
+        MonitoringConfig: {
+            /** Excluded Channel Ids */
+            excluded_channel_ids?: string[];
+            /** Rule Ids */
+            rule_ids?: string[];
+        };
+        /** MonitoringRule */
+        MonitoringRule: {
+            /** Id */
+            id: string;
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+            /** Channel Id */
+            channel_id: string;
+            /**
+             * Operator
+             * @enum {string}
+             */
+            operator: "gt" | "gte" | "lt" | "lte" | "outside" | "missing";
+            /** Threshold */
+            threshold?: number | null;
+            /** Minimum */
+            minimum?: number | null;
+            /** Maximum */
+            maximum?: number | null;
+            /**
+             * Effect
+             * @default quality_warning
+             * @enum {string}
+             */
+            effect: "fault" | "quality_warning";
+        };
         /** PredictionMetrics */
         PredictionMetrics: {
             /**
@@ -700,7 +829,10 @@ export interface components {
              * @enum {string}
              */
             action: "accept" | "question" | "override";
-            /** Operator */
+            /**
+             * Operator
+             * @default Local user
+             */
             operator: string;
             /**
              * Reason
@@ -717,7 +849,10 @@ export interface components {
              * @enum {string}
              */
             action: "accept" | "question" | "override";
-            /** Operator */
+            /**
+             * Operator
+             * @default Local user
+             */
             operator: string;
             /**
              * Reason
@@ -735,6 +870,58 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** RuleInterval */
+        RuleInterval: {
+            /** Row Start */
+            row_start: number;
+            /** Row End */
+            row_end: number;
+        };
+        /** RuleMatch */
+        RuleMatch: {
+            /** Rule Id */
+            rule_id: string;
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+            /** Channel Id */
+            channel_id: string;
+            /**
+             * Effect
+             * @enum {string}
+             */
+            effect: "fault" | "quality_warning";
+            /** Violation Count */
+            violation_count: number;
+            /** Row Start */
+            row_start: number;
+            /** Row End */
+            row_end: number;
+            /** Evidence Ids */
+            evidence_ids: string[];
+            /** Intervals */
+            intervals?: components["schemas"]["RuleInterval"][];
+        };
+        /** RuleProposalCreate */
+        RuleProposalCreate: {
+            /** Request */
+            request: string;
+        };
+        /** RuleProposalView */
+        RuleProposalView: {
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
+            rule?: components["schemas"]["MonitoringRule"] | null;
+            /**
+             * Message
+             * @default
+             */
+            message: string;
         };
         /** RunConfig */
         RunConfig: {
@@ -765,6 +952,23 @@ export interface components {
             analysis_version: string;
             /** Path */
             path?: string | null;
+            /** Source Id */
+            source_id?: string | null;
+            /**
+             * Reader Mode
+             * @default legacy
+             * @enum {string}
+             */
+            reader_mode: "legacy" | "rows";
+            /** Excluded Channel Ids */
+            excluded_channel_ids?: string[];
+            /** Rules */
+            rules?: components["schemas"]["MonitoringRule"][];
+            /**
+             * Monitoring Locked
+             * @default false
+             */
+            monitoring_locked: boolean;
             /** Limits */
             limits?: {
                 [key: string]: components["schemas"]["ChannelLimit"];
@@ -856,6 +1060,16 @@ export interface components {
             points: components["schemas"]["TracePoint"][];
             /** Flagged */
             flagged: components["schemas"]["Trigger"][];
+            /** Start Batch */
+            start_batch?: number | null;
+            /** End Batch */
+            end_batch?: number | null;
+            /** Latest Batch */
+            latest_batch?: number | null;
+            /** Row Start */
+            row_start?: number | null;
+            /** Row End */
+            row_end?: number | null;
         };
         /** Trigger */
         Trigger: {
@@ -967,10 +1181,44 @@ export interface operations {
             };
         };
     };
+    upload_source_api_v1_sources_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_source_api_v1_sources_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     source_preview_api_v1_sources_preview_get: {
         parameters: {
-            query: {
-                path: string;
+            query?: {
+                path?: string | null;
+                source_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -1068,6 +1316,8 @@ export interface operations {
             query: {
                 channel_id: string;
                 limit?: number;
+                end_batch?: number | null;
+                batch_window?: number | null;
             };
             header?: never;
             path: {
@@ -1207,6 +1457,140 @@ export interface operations {
                 "application/json": components["schemas"]["RunControl"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    monitoring_config_api_v1_runs__run_id__monitoring_config_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MonitoringConfig"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    new_rule_proposal_api_v1_runs__run_id__rule_proposals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleProposalCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleProposalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rule_proposal_api_v1_runs__run_id__rule_proposals__proposal_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleProposalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_rule_api_v1_runs__run_id__rule_proposals__proposal_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

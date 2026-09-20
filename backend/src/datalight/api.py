@@ -299,7 +299,7 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
                 )
             ).all()
             flagged = [
-                t
+                {**t, "row_start": max(first, t["row_start"]), "row_end": min(last.row_end, t["row_end"])}
                 for finding in findings
                 for t in finding.details["triggers"]
                 if t["channel_id"] == channel_id

@@ -48,3 +48,16 @@ Open the setup screen and submit a CSV path before expecting a report. The repor
 For an isolated Compose test project, set `COMPOSE_PROJECT_NAME`, `WEB_PORT`, `DATA_DIR=./tests/fixtures` and `LLM_ENABLED=false`. `make test-browser` takes `BASE_URL`. The restart smoke also accepts `COMPOSE_COMMAND` (for example `docker --context lima-docker compose -p datalight-qa`) so it restarts only the intended synthetic project. Never point browser/restart tests at real observations.
 
 If a host-level `DOCKER_HOST` selects a stopped daemon, use an explicit running context for this command; do not silently change the global context. Some pnpm installations request a module purge when their store differs; local verification can use `WEB='pnpm --config.verify-deps-before-run=false --dir apps/web'` with the existing locked installation. `UV_CACHE_DIR=/tmp/datalight-uv` keeps cache writes in the sandbox.
+
+## Demo-improvement verification
+
+Uploads use `UPLOAD_DIR` (Docker: `/uploads`) and `MAX_UPLOAD_BYTES` (default 268435456). API and worker share the persistent uploads volume. The web entrypoint derives the proxy limit from the same byte setting plus 1 MiB for multipart framing; the backend enforces the exact file limit. Native development can set `UPLOAD_DIR=./runtime/uploads` to use a writable local directory.
+
+The committed model fixture answers only synthetic test requests. To verify the complete asynchronous rule and conversation workflow without external credentials:
+
+```bash
+DATA_DIR=./tests/fixtures WEB_PORT=18080 docker --context lima-docker compose -p datalight-qa -f compose.yaml -f compose.qa.yaml up --build -d
+BASE_URL=http://localhost:18080 MODEL_QA=1 make test-browser
+```
+
+Use the available Docker context on another machine. The override explicitly selects the synthetic model and clears provider credentials. It exposes only loopback API/database ports for tests, and must never be used with real observations. The browser tests cover anonymous review, two-turn conversation, uploads, exclusions, reviewed rules, frozen configuration, historical scrolling and reload behavior. API tests also cover cancelled question recovery, large/partial historical windows and first-Play races.

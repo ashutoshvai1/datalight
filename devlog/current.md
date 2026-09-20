@@ -2,50 +2,48 @@
 
 ## Objective
 
-Implement the approved simplification: explicit CSV setup → initial understanding → paused monitoring → one evidence-backed decision per batch → append-only review and questions. Previous simplification is complete; approved demo improvements are now in progress.
+The approved demo improvements are implemented, verified and deployed locally: prominent product message, CSV upload, pre-Play channel selection and reviewed AI rules, multi-turn questions, clearer evidence/matrix, three-batch chart history and Docs.
 
-The product remains generic. [DATASET.md](../docs/DATASET.md) is offline testbed context, never runtime model knowledge. Prior foundation verification is preserved in [the historical handoff](foundation-verification.md).
+The product remains generic. [DATASET.md](../docs/DATASET.md) is offline testbed context. Earlier foundation verification is preserved in [the historical handoff](foundation-verification.md).
 
 ## Constraints
 
-- Raw observations remain in local CSV files; provider requests contain typed aggregates and explicit operator questions only.
-- Metadata cannot influence live detectors or model interpretations. Original channel names are replaced with opaque IDs for questions.
-- Quality warnings remain separate from process status. Per user choice, insufficient coverage displays OK with a prominent limitation warning.
-- Initial references remain provisional and fixed; reviews never adapt thresholds.
-- One active replay. Sequence boundaries and malformed/order-invalid observations cannot be bridged by temporal windows.
-- Optional auto-pause and a last-value predictor comparison remain excluded pending approval.
+- Raw CSV observations stay local. Model calls contain typed aggregates, sanitized questions/conversation or sanitized rule requests with opaque channel IDs.
+- Evaluation metadata and sample never become detector features. Uploaded CSVs use file row order; legacy mounted sources retain sequence resets.
+- Initial references remain provisional and fixed. Exclusions and explicitly applied deterministic rules lock at first Play.
+- Quality warnings stay separate from process status unless the user explicitly applied a fault-effect rule. Insufficient coverage retains OK with a visible limitation.
+- One active replay; bounded reading, source identity checks, atomic batch/checkpoint commits and append-only evidence/reviews remain intact.
+- Compound/temporal custom rules, auto-pause and a last-value predictor comparator remain outside implemented scope.
 
 ## Active work
 
 | Workstream | Owner | Status | Integration surface |
 |---|---|---|---|
-| [Demo improvements](workstreams/demo-improvements.md) | Integration agent | In progress | Uploads, setup/rules, conversations, charts, Docs |
-| [Simplification](workstreams/simplification.md) | Current agent | Complete; deployed on localhost:8080 | Backend, UI, migrations, local demos, documentation |
-| [Foundation](workstreams/foundation.md) | Prior handoff | Retained as storage/recovery basis | Historical reports and reviews |
+| [Demo improvements](workstreams/demo-improvements.md) | Integration agent | Complete; deployed on localhost:8080 | Uploads, configuration/rules, conversation, charts, Docs |
+| [Simplification](workstreams/simplification.md) | Prior integration | Complete | Initial report and deterministic monitoring |
+| [Foundation](workstreams/foundation.md) | Prior handoff | Historical | Storage/recovery basis |
 
 ## Blockers
 
-No implementation blockers. The shell's default Docker endpoint targets a stopped VM; the working app is on context `lima-docker`. Use the explicit context locally rather than changing global Docker settings.
+None. Use Docker context `lima-docker` explicitly on this machine; the shell's default endpoint targets a stopped VM. The existing Vite large-chunk advisory is non-blocking.
 
 ## Validation
 
-Verified on 2026-09-19:
+Verified on 2026-09-20:
 
-- `make check`: Python lint, configured mypy with untyped-body checking, TypeScript, ESLint, 22 CPU tests, documentation links and production web build pass.
-- Existing deployment migration preserves all 9 analyses, 12,347 evidence records, 502 findings and 6 reviews. Health and the three preloaded source choices are verified; startup creates no analysis.
-- Two PostgreSQL tests pass: complete migration chain/schema parity, concurrent claims, unique decisions and immutable evidence.
-- Synthetic Playwright workflow passes: setup defaults, paused report, trace, override/question persistence, reload, EOF, desktop/mobile layout, no page errors. Screenshots inspected; panel spacing corrected.
-- Synthetic database/API/worker restart preserves checkpoint, temporal state, original decision, three reviews, 11 monitoring decisions and 12 contiguous batches.
-- Live configured Norrin requests succeed for a complete four-channel synthetic report and an evidence-grounded review question. Final paired check took 14.38 seconds. This verifies the configured provider with synthetic aggregates, not all 52 real-data explanations.
-- A live Q&A response originally invented the citation `decision`; responses now require a real stored decision-evidence ID. Rejected attempts stayed unavailable and the corrected live request passed. A regression test covers invented citations.
-- Temporal tests cover forecast alignment/no future leakage, noise, steps, drift, holds, constants, range/missing values, malformed records, metadata isolation, boundaries, and identical triggered observations across batch sizes 7/37/100/173 with pause/restart.
-- Original-data preparation evaluates all 20 faulty test scenarios, run 1. Three CSVs each contain healthy runs 1 and 2 followed by one faulty run, 2,880 rows total. Values and resets remain unchanged.
-- Each real demo completes in 25 monitoring batches with zero process-warning batches during the two healthy runs. First detections occur at faulty-run samples 240 (abrupt), 166 (drift), and 225 (multichannel). Respectively 4, 29 and 45 channels trigger; the latter two also produce separate stuck-value warnings. These are selected demonstration results, not general accuracy estimates.
+- `make check`: Ruff, mypy, TypeScript, ESLint, 40 CPU tests, documentation links and production build pass. Final frontend wheel/slider changes also pass lint/build.
+- Five PostgreSQL tests pass: migrations/schema parity, immutable evidence, replay/claim concurrency, one pending question per decision, and first-Play races with configuration save/rule Apply.
+- Three synthetic Docker Playwright workflows pass: Docs without an analysis; prepared-source setup/replay/review; uploaded CSV through exclusion, rule proposal/apply, replay, numbered evidence, two-turn conversation and reload. Desktop/mobile screenshots inspected.
+- Historical browsing stays pinned as batches arrive; horizontal wheel/keyboard/slider work; Latest and page reload select the latest three batches. Trace tests cover >1,000 points, initial-only and partial final batches, matching forecast overlap and clipped flag intervals.
+- Synthetic database/API/worker restart preserves the uploaded source, rule/configuration, checkpoint, trace, decisions and two-turn conversation exactly.
+- Configured live Norrin provider succeeds for one synthetic threshold-rule proposal and a cited question/follow-up. Only synthetic aggregate evidence and opaque IDs were sent. This does not establish general model accuracy.
+- Local deployment health passes for database/API/worker/web. All 12 pre-existing analyses and demo source choices are preserved; startup created no analysis. No database migration was needed for the new compatible JSON fields.
+- Public OpenAPI and TypeScript contracts are regenerated. Final source formatting and diff whitespace checks pass.
 
 ## Next steps
 
-1. Open localhost:8080, choose one of the three CSVs and submit the setup. Defaults are 500 initial samples, 100 per batch and 10 seconds. Press Play on Monitoring after reviewing the report.
-2. Recheck provider availability before a live demonstration; outages leave deterministic monitoring operational.
-3. Consider only explicitly approved follow-up work from the [roadmap](../docs/roadmap.md).
+1. Open localhost:8080 and choose New analysis. Select a demo or upload a supported CSV; setup defaults remain 500 / 100 / 10 seconds.
+2. Review Understanding, save any channel exclusions, and optionally propose/review/apply a simple rule. Press Play to lock settings and begin monitoring.
+3. Use Docs for metrics/criteria/evidence explanations and Decision log for continued conversations. Provider outages do not stop deterministic monitoring.
 
-Local data and provenance: `runtime/demos/`, `runtime/demo-selection.json`, `runtime/demo-validation.json`. Existing database backup: ignored `runtime/pre-v2-database.sql`. The ignored `.env` selects `DATA_DIR=./runtime/demos` and preserves backend provider credentials. The synthetic QA stack is isolated on port 18080 under project `datalight-qa`; real data is never used in browser captures.
+The synthetic QA stack remains isolated on port 18080 under `datalight-qa`, with the explicitly synthetic model fixture from `compose.qa.yaml`. Real demo files remain in ignored `runtime/demos/`; credentials remain in ignored `.env`. Uploads live in persistent named volumes, separate from the read-only demo mount. All screenshots use synthetic data.

@@ -5,7 +5,11 @@ import { Badge, Empty, EvidenceLinks } from "../components";
 import { Chart } from "../Chart";
 import MonitoringSetup from "../MonitoringSetup";
 
-export default function Understanding({ run, report, showEvidence }: PageProps) {
+export default function Understanding({
+  run,
+  report,
+  showEvidence,
+}: PageProps) {
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState("");
   const [params] = useSearchParams();

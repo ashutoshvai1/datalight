@@ -89,7 +89,9 @@ test("setup, paused report, sample chart, review and end of file", async ({
   if (process.env.MODEL_QA === "1") {
     await expect(card.getByText(/Synthetic answer/).first()).toBeVisible();
   } else {
-    await expect(card.getByText(/Model interpretation is disabled/)).toBeVisible();
+    await expect(
+      card.getByText(/Model interpretation is disabled/),
+    ).toBeVisible();
   }
   await page.reload();
   await expect(

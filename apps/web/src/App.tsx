@@ -18,14 +18,20 @@ import Monitoring from "./pages/Monitoring";
 import DecisionLog from "./pages/DecisionLog";
 import Docs from "./pages/Docs";
 
-const tagline = "Illuminate your data. Talk to it. Evidence centric analysis. Your data stays private.";
+const canNavigate = () =>
+  window.dispatchEvent(new Event("datalight:navigate", { cancelable: true }));
+
+const tagline =
+  "Illuminate your data. Talk to it. Evidence centric analysis. Your data stays private.";
 
 type Choice = components["schemas"]["SourceChoice"];
 type Preview = components["schemas"]["SourcePreview"];
 
 function Setup({ done }: { done: (run: Run) => void }) {
   const [path, setPath] = useState<string | null>(null);
-  const [uploaded, setUploaded] = useState<components["schemas"]["SourceView"] | null>(null);
+  const [uploaded, setUploaded] = useState<
+    components["schemas"]["SourceView"] | null
+  >(null);
   const [progress, setProgress] = useState(0);
   const upload = useMutation({
     mutationFn: (file: File) => {
@@ -51,7 +57,9 @@ function Setup({ done }: { done: (run: Run) => void }) {
   const preview = useQuery({
     queryKey: ["preview", uploaded?.id ?? selectedPath],
     queryFn: () =>
-      api<Preview>(`/sources/preview?${uploaded ? `source_id=${encodeURIComponent(uploaded.id)}` : `path=${encodeURIComponent(selectedPath)}`}`),
+      api<Preview>(
+        `/sources/preview?${uploaded ? `source_id=${encodeURIComponent(uploaded.id)}` : `path=${encodeURIComponent(selectedPath)}`}`,
+      ),
     enabled: !!uploaded || !!selectedPath,
   });
   const start = useMutation({
@@ -103,7 +111,9 @@ function Setup({ done }: { done: (run: Run) => void }) {
             }}
             required={!uploaded}
             disabled={upload.isPending}
-            placeholder={uploaded ? "Choose a different mounted CSV" : "demo_abrupt.csv"}
+            placeholder={
+              uploaded ? "Choose a different mounted CSV" : "demo_abrupt.csv"
+            }
           />
         </label>
         <datalist id="demo-sources">
@@ -132,18 +142,34 @@ function Setup({ done }: { done: (run: Run) => void }) {
         </div>
         <div className="upload-area">
           <label htmlFor="csv-upload">Upload CSV</label>
-          <input id="csv-upload" type="file" accept=".csv,text/csv"
+          <input
+            id="csv-upload"
+            type="file"
+            accept=".csv,text/csv"
             disabled={upload.isPending}
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) upload.mutate(file);
               event.target.value = "";
-            }} />
-          {upload.isPending && <div role="status">
-            <progress aria-label="CSV upload progress" value={progress} max={100} />
-            <span>{progress < 100 ? `Uploading ${progress}%` : "Checking CSV…"}</span>
-          </div>}
-          {uploaded && <p className="selected-upload" role="status">Selected: <strong>{uploaded.name}</strong></p>}
+            }}
+          />
+          {upload.isPending && (
+            <div role="status">
+              <progress
+                aria-label="CSV upload progress"
+                value={progress}
+                max={100}
+              />
+              <span>
+                {progress < 100 ? `Uploading ${progress}%` : "Checking CSV…"}
+              </span>
+            </div>
+          )}
+          {uploaded && (
+            <p className="selected-upload" role="status">
+              Selected: <strong>{uploaded.name}</strong>
+            </p>
+          )}
         </div>
         <div className="setup-grid">
           <label>
@@ -229,10 +255,22 @@ function Setup({ done }: { done: (run: Run) => void }) {
             </table>
           </div>
         </details>
-        <ErrorNotice error={upload.error || preview.error || start.error || (!uploaded && choices.error)} />
+        <ErrorNotice
+          error={
+            upload.error ||
+            preview.error ||
+            start.error ||
+            (!uploaded && choices.error)
+          }
+        />
         <button
           className="primary"
-          disabled={upload.isPending || start.isPending || !preview.data || preview.isFetching}
+          disabled={
+            upload.isPending ||
+            start.isPending ||
+            !preview.data ||
+            preview.isFetching
+          }
         >
           {" "}
           {start.isPending ? "Starting…" : "Build understanding report"}
@@ -315,7 +353,10 @@ export default function App() {
             <ListChecks size={18} />
             Decision log
           </NavLink>
-          <NavLink to={`/docs${search}`} onClick={() => setSetup(false)}><BookOpen size={18} />Docs</NavLink>
+          <NavLink to={`/docs${search}`} onClick={() => setSetup(false)}>
+            <BookOpen size={18} />
+            Docs
+          </NavLink>
         </nav>
         <div className="sidebar-bottom">
           <span className="local-indicator">Local workspace</span>
@@ -325,19 +366,22 @@ export default function App() {
       <div className="main-shell">
         <header className="topbar">
           <span>
-            {showingDocs ? "Docs" : showingSetup
-              ? "New analysis"
-              : selectedRun
-                ? "Historical analysis"
-                : (run?.config.path ??
-                  system.data?.source?.name ??
-                  "Datalight")}
+            {showingDocs
+              ? "Docs"
+              : showingSetup
+                ? "New analysis"
+                : selectedRun
+                  ? "Historical analysis"
+                  : (run?.config.path ??
+                    system.data?.source?.name ??
+                    "Datalight")}
           </span>
           <div className="top-actions">
             <select
               aria-label="Analysis history"
               value={selectedRun ?? system.data?.run?.id ?? ""}
               onChange={(e) => {
+                if (!canNavigate()) return;
                 setParams({ run: e.target.value });
                 setSetup(false);
               }}
@@ -348,7 +392,13 @@ export default function App() {
                 </option>
               ))}
             </select>
-            <button onClick={() => { setSetup(true); navigate(`/understanding${search}`); }}>
+            <button
+              onClick={() => {
+                if (!canNavigate()) return;
+                setSetup(true);
+                navigate(`/understanding${search}`);
+              }}
+            >
               <Plus size={16} />
               New analysis
             </button>
@@ -363,7 +413,9 @@ export default function App() {
               (run?.error ? new Error(run.error) : null)
             }
           />
-          {showingDocs ? <Docs /> : showingSetup ? (
+          {showingDocs ? (
+            <Docs />
+          ) : showingSetup ? (
             <Setup done={done} />
           ) : pageProps ? (
             <Routes>

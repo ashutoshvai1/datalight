@@ -46,14 +46,21 @@ export function uploadCsv(
       if (event.lengthComputable)
         progress(Math.round((event.loaded / event.total) * 100));
     };
-    request.onerror = () => reject(new Error("Upload interrupted. Please try again."));
+    request.onerror = () =>
+      reject(new Error("Upload interrupted. Please try again."));
     request.onload = () => {
-      if (request.status >= 200 && request.status < 300) resolve(request.response);
-      else reject(new Error(typeof request.response?.detail === "string"
-        ? request.response.detail
-        : request.status === 413
-          ? "This CSV exceeds the configured upload size limit."
-          : "CSV upload failed. Please try again."));
+      if (request.status >= 200 && request.status < 300)
+        resolve(request.response);
+      else
+        reject(
+          new Error(
+            typeof request.response?.detail === "string"
+              ? request.response.detail
+              : request.status === 413
+                ? "This CSV exceeds the configured upload size limit."
+                : "CSV upload failed. Please try again.",
+          ),
+        );
     };
     const form = new FormData();
     form.append("file", file);

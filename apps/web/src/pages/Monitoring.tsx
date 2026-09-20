@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pause, Play } from "lucide-react";
 import { api, number, type PageProps } from "../api";
@@ -7,22 +7,13 @@ import { Badge, Empty, ErrorNotice } from "../components";
 import { Chart } from "../Chart";
 import DecisionCard, { type BatchDecision } from "../DecisionCard";
 
-type TraceWindow = components["schemas"]["TraceView"] & {
-  start_batch: number;
-  end_batch: number;
-  latest_batch: number;
-  row_start: number;
-  row_end: number;
-};
+type TraceWindow = components["schemas"]["TraceView"];
 
 export default function Monitoring({ run, report, showEvidence }: PageProps) {
   const client = useQueryClient();
   const [selected, setSelected] = useState("");
   const [endBatch, setEndBatch] = useState<number | null>(null);
-  const scrollbar = useRef<HTMLDivElement>(null);
-  const excluded =
-    (run.config as typeof run.config & { excluded_channel_ids?: string[] })
-      .excluded_channel_ids ?? [];
+  const excluded = run.config.excluded_channel_ids ?? [];
   const channels =
     report?.profiles.filter((p) => !excluded.includes(p.id)) ?? [];
   const channel =
@@ -50,22 +41,16 @@ export default function Monitoring({ run, report, showEvidence }: PageProps) {
   );
   const oldestEnd = Math.min(2, latestBatch);
   const visibleEnd = endBatch ?? latestBatch;
-  useEffect(() => {
-    const element = scrollbar.current;
-    if (!element) return;
-    const update = () => {
-      const fraction =
-        latestBatch > oldestEnd
-          ? (visibleEnd - oldestEnd) / (latestBatch - oldestEnd)
-          : 1;
-      element.scrollLeft =
-        fraction * (element.scrollWidth - element.clientWidth);
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [latestBatch, oldestEnd, visibleEnd]);
+  const scrollHistory = (delta: number) => {
+    if (!delta) return;
+    setEndBatch((current) => {
+      const value = Math.max(
+        oldestEnd,
+        Math.min(latestBatch, (current ?? latestBatch) + Math.sign(delta)),
+      );
+      return value === latestBatch ? null : value;
+    });
+  };
   const control = useMutation({
     mutationFn: () =>
       api(`/runs/${run.id}/control`, {
@@ -93,6 +78,7 @@ export default function Monitoring({ run, report, showEvidence }: PageProps) {
     sequence = p.sequence;
   }
   const option = {
+    animation: false,
     tooltip: { trigger: "axis", renderMode: "richText" },
     legend: { bottom: 0 },
     grid: { top: 25, left: 70, right: 25, bottom: 70 },
@@ -208,8 +194,8 @@ export default function Monitoring({ run, report, showEvidence }: PageProps) {
               {trace.data?.points.length
                 ? `Samples ${trace.data.row_start}–${trace.data.row_end} · `
                 : ""}
-              Current batch and up to two previous batches. Shading marks
-              detected changes.
+              {endBatch === null ? "Current batch" : "Selected batch"} and up to
+              two previous batches. Shading marks detected changes.
             </p>
           </div>
           <select
@@ -224,9 +210,16 @@ export default function Monitoring({ run, report, showEvidence }: PageProps) {
             ))}
           </select>
         </div>
-        <Chart option={option} label="Incoming channel values and forecast" />
+        <div
+          id="monitoring-trace"
+          onWheel={(event) => scrollHistory(event.deltaX)}
+        >
+          <Chart option={option} label="Incoming channel values and forecast" />
+        </div>
         <div className="history-controls">
-          <span className="muted">Scroll horizontally for earlier batches</span>
+          <span className="muted">
+            Drag or scroll horizontally for earlier batches
+          </span>
           <button
             disabled={endBatch === null}
             onClick={() => setEndBatch(null)}
@@ -234,44 +227,28 @@ export default function Monitoring({ run, report, showEvidence }: PageProps) {
             Latest
           </button>
         </div>
-        <div
+        <input
+          type="range"
           className="history-scroll"
-          ref={scrollbar}
           role="scrollbar"
           aria-label="Monitoring history"
+          aria-controls="monitoring-trace"
           aria-orientation="horizontal"
           aria-valuemin={oldestEnd}
           aria-valuemax={latestBatch}
           aria-valuenow={visibleEnd}
           aria-valuetext={`Through batch ${visibleEnd}`}
-          tabIndex={0}
-          onKeyDown={(event) => {
-            let value = visibleEnd;
-            if (event.key === "ArrowLeft") value--;
-            else if (event.key === "ArrowRight") value++;
-            else if (event.key === "Home") value = oldestEnd;
-            else if (event.key === "End") value = latestBatch;
-            else return;
-            event.preventDefault();
-            value = Math.max(oldestEnd, Math.min(latestBatch, value));
+          min={oldestEnd}
+          max={latestBatch}
+          step={1}
+          value={visibleEnd}
+          disabled={latestBatch <= oldestEnd}
+          onChange={(event) => {
+            const value = Number(event.target.value);
             setEndBatch(value === latestBatch ? null : value);
           }}
-          onScroll={(event) => {
-            const element = event.currentTarget;
-            const span = element.scrollWidth - element.clientWidth;
-            if (span <= 0) return;
-            const value = Math.round(
-              oldestEnd +
-                (element.scrollLeft / span) * (latestBatch - oldestEnd),
-            );
-            if (value !== visibleEnd)
-              setEndBatch(value === latestBatch ? null : value);
-          }}
-        >
-          <div
-            style={{ width: `${Math.max(1, (latestBatch + 1) / 3) * 100}%` }}
-          />
-        </div>
+          onWheel={(event) => scrollHistory(event.deltaX)}
+        />
       </section>
       <h2 className="section-title">Recent decisions</h2>
       {latest ? (

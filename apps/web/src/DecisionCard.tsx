@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { components } from "./generated/api";
 import { api, number, type Review } from "./api";
 import { Badge, ErrorNotice, EvidenceLinks } from "./components";
@@ -23,9 +28,15 @@ export default function DecisionCard({
   const [question, setQuestion] = useState("");
   const [replacement, setReplacement] = useState("OK");
   const [open, setOpen] = useState(false);
-  const reviews = useQuery({
+  const reviews = useInfiniteQuery({
     queryKey: ["reviews", item.id],
-    queryFn: () => api<Review[]>(`/findings/${item.id}/reviews`),
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      api<Review[]>(
+        `/findings/${item.id}/reviews?limit=100&offset=${pageParam}`,
+      ),
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length === 100 ? allPages.length * 100 : undefined,
     enabled: open || !!action,
     refetchInterval: open ? 3000 : false,
   });
@@ -57,9 +68,10 @@ export default function DecisionCard({
       void client.invalidateQueries({ queryKey: ["decisions"] });
     },
   });
+  const history = reviews.data?.pages.flat() ?? [];
   const d = item.decision;
   const pendingQuestion =
-    reviews.data?.some(
+    history.some(
       (review) =>
         review.action === "question" &&
         !answers.data?.some((answer) => answer.review_id === review.id),
@@ -67,20 +79,7 @@ export default function DecisionCard({
     answers.data?.some((answer) =>
       ["pending", "queued", "running"].includes(answer.status),
     );
-  const ruleMatches =
-    (
-      d as typeof d & {
-        rule_matches?: {
-          rule_id: string;
-          channel_id: string;
-          effect: string;
-          violation_count: number;
-          row_start: number;
-          row_end: number;
-          evidence_ids: string[];
-        }[];
-      }
-    ).rule_matches ?? [];
+  const ruleMatches = d.rule_matches ?? [];
   const display = (text: string) =>
     text.replace(/\bc\d{3}\b/g, (id) => names[id] ?? id);
   return (
@@ -273,36 +272,53 @@ export default function DecisionCard({
       <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
         <summary>Review history & questions</summary>
         <ErrorNotice error={reviews.error || answers.error} />
-        {reviews.data?.length ? (
-          reviews.data.map((r) => {
-            const answer = answers.data?.find((a) => a.review_id === r.id);
-            return (
-              <div className="review-history" key={r.id}>
-                <strong>
-                  {r.action === "question"
-                    ? "You asked"
-                    : r.action === "accept"
-                      ? "Accepted"
-                      : "Overridden"}
-                </strong>
-                <time>{new Date(r.created_at).toLocaleString()}</time>
-                {r.replacement && <p>Human assessment: {r.replacement}</p>}
-                {r.reason && <p>{r.reason}</p>}
-                {r.action === "question" && (
-                  <div className="answer">
-                    <Badge>{answer?.status ?? "pending"}</Badge>
-                    <p>
-                      {answer ? display(answer.text) : "Waiting for an answer…"}
-                    </p>
-                    <EvidenceLinks
-                      ids={answer?.evidence_ids ?? []}
-                      showEvidence={showEvidence}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })
+        {reviews.hasNextPage && (
+          <button
+            type="button"
+            disabled={reviews.isFetchingNextPage}
+            onClick={() => void reviews.fetchNextPage()}
+          >
+            Load earlier reviews
+          </button>
+        )}
+        {history.length ? (
+          [...history]
+            .sort(
+              (a, b) =>
+                a.created_at.localeCompare(b.created_at) ||
+                a.id.localeCompare(b.id),
+            )
+            .map((r) => {
+              const answer = answers.data?.find((a) => a.review_id === r.id);
+              return (
+                <div className="review-history" key={r.id}>
+                  <strong>
+                    {r.action === "question"
+                      ? "You asked"
+                      : r.action === "accept"
+                        ? "Accepted"
+                        : "Overridden"}
+                  </strong>
+                  <time>{new Date(r.created_at).toLocaleString()}</time>
+                  {r.replacement && <p>Human assessment: {r.replacement}</p>}
+                  {r.reason && <p>{r.reason}</p>}
+                  {r.action === "question" && (
+                    <div className="answer">
+                      <Badge>{answer?.status ?? "pending"}</Badge>
+                      <p>
+                        {answer
+                          ? display(answer.text)
+                          : "Waiting for an answer…"}
+                      </p>
+                      <EvidenceLinks
+                        ids={answer?.evidence_ids ?? []}
+                        showEvidence={showEvidence}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })
         ) : (
           <p>No reviews yet.</p>
         )}
@@ -314,7 +330,7 @@ export default function DecisionCard({
           }}
         >
           <label>
-            {reviews.data?.some((review) => review.action === "question")
+            {history.some((review) => review.action === "question")
               ? "Continue the conversation"
               : "Your question"}
             <textarea

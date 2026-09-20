@@ -21,4 +21,18 @@ Synthetic upload through report, saved exclusions, AI-proposed/applied rule and 
 
 ## Status
 
-Implementation in progress; integration owner will record final validation here and reconcile current.md.
+Implementation, integration and local deployment verification complete. The app at localhost:8080 is healthy; all 12 prior analyses and demo choices were preserved, and startup created no analysis.
+
+## Validation
+
+- `make check`: Python Ruff/mypy, TypeScript/ESLint, 40 CPU tests, docs links and production build pass. Existing Vite chunk-size advisory remains.
+- Five PostgreSQL tests pass, including schema/migration parity, immutable evidence, concurrent question submission and first-Play races against configuration save/rule Apply.
+- Three synthetic Docker browser workflows pass: Docs without an analysis, prepared-source replay/review, and upload through exclusions, applied rule, monitoring, cited two-turn conversation and reload. Desktop/mobile screenshots inspected.
+- Browser regression covers the historical viewport staying pinned during polling, horizontal wheel navigation, Latest, and reload defaulting to the latest three batches. A controlled slider prevents browser scroll restoration from choosing an old batch; live charts render without reveal animation.
+- Restarting synthetic database/API/worker preserves uploaded source, applied rule, configuration, checkpoint, trace, decisions and two-turn answers exactly.
+- The configured live provider succeeds for a synthetic threshold-rule proposal plus an evidence-cited question and follow-up. No raw observations or original channel names were sent.
+- Generated OpenAPI/browser contracts are updated. New analyses publish terminal unavailable results for cancelled pending questions/proposals so historical discussions can continue; late responses cannot replace them.
+
+## Remaining boundaries
+
+Uploads accept the existing UTF-8/header CSV format and bounded numeric discovery, with configurable 256 MiB default size and existing column/record limits. Rules support one scalar comparison, outside range or missing check; compound/temporal formulas remain unsupported. Model context includes ten prior completed turns, while older transcript pages remain available locally.

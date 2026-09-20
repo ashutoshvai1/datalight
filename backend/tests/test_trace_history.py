@@ -13,7 +13,7 @@ def test_large_history_partial_final_batch_and_initial_window(store, tmp_path):
     settings, factory = store
     settings.upload_dir = tmp_path / "uploads"
     client = TestClient(create_app(settings, factory))
-    data = "signal\n" + "".join(f"{math.sin(i / 13) + i * 0.001}\n" for i in range(2707))
+    data = "signal\n" + "".join(f"{math.sin(i / 13) + i * 0.001 + (20 if i > 1500 else 0)}\n" for i in range(2707))
     uploaded = client.post(
         "/api/v1/sources/upload", files={"file": ("history.csv", data, "text/csv")}
     )
@@ -68,3 +68,10 @@ def test_large_history_partial_final_batch_and_initial_window(store, tmp_path):
     assert historical_initial["points"] == initial["points"]
     assert historical_initial["latest_batch"] == 4
     assert len(client.get(path, params={"channel_id": "c001"}).json()["points"]) == 1000
+
+    final_batch = client.get(path, params={"channel_id": "c001", "batch_window": 1}).json()
+    assert final_batch["flagged"]
+    assert all(
+        final_batch["row_start"] <= trigger["row_start"] <= trigger["row_end"] <= final_batch["row_end"]
+        for trigger in final_batch["flagged"]
+    )
