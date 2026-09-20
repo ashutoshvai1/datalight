@@ -8,7 +8,7 @@ The [Tennessee Eastman export](docs/DATASET.md) is the primary testbed. Its labe
 
 ## Quickstart
 
-You need Docker running with Compose, `make`, and about 4 GB of available memory. No Python, Node, data download, or model key is needed to try the included demo.
+You need Docker running with Compose, `make`, and about 4 GB of available memory. No Python, Node, data download, or model key is needed for the included synthetic demo. To also try AI explanations, questions and rule proposals, follow the [optional model setup](docs/demo-setup.md#enable-model-explanations-questions-and-rules) before starting.
 
 **1. Start the app.** In the `datalight` repository folder, run:
 
@@ -16,34 +16,23 @@ You need Docker running with Compose, `make`, and about 4 GB of available memory
 make demo
 ```
 
-The first build takes a few minutes. Wait for **Ready: http://localhost:8080**. This command uses prepared files in `runtime/demos` when available, or the included synthetic `demo.csv` otherwise. It preserves existing analyses, uploads, and model settings in `.env`.
+This builds and starts the services, runs database migrations, and waits for service health. The first build takes a few minutes. Wait for **Ready: http://localhost:8080**, then open [Datalight](http://localhost:8080). Prepared files in `runtime/demos` are selected when available; otherwise the included synthetic demos are ready to use.
 
-**2. Load a demo.** Open [Datalight](http://localhost:8080), click **New analysis**, and select **demo abrupt** (or **demo** for the included synthetic file). Keep the defaults—**500** initial samples, **100** samples per batch, **10** seconds between batches—and click **Build understanding report**. For a faster presentation, change the interval to **1** second before building the report.
+**2. Build a report.** Click **New analysis** and select **demo** (synthetic), or **demo abrupt** if prepared presentation files are available. Use **500** initial samples and **100** samples per batch. Set the interval to **1 second** for a faster presentation (the default is 10 seconds), then click **Build understanding report**. Playback starts paused.
 
-**3. Review and play.** Read Understanding. Optionally exclude channels and click **Save monitoring setup**. Open **Monitoring** and press **Play**. Inspect a flagged batch's evidence, then use **Decision log** to accept, question, or override it. **Docs** explains the metrics. Questions and natural-language rules need the [optional model setup](#optional-llm-synthesis-and-questions).
+**3. Inspect the evidence.** Read **Understanding** for quality checks, statistics, correlations and prediction results. Optionally exclude channels and click **Save monitoring setup**. Open **Monitoring**, press **Play**, and inspect a flagged batch's evidence and confidence basis. Channel selection and applied rules lock at first Play.
 
-To use your own file, choose **Upload CSV** instead of a demo. Use a UTF-8 CSV with a header row and numeric data (up to 256 MiB by default). Playback starts after the initial window; a shorter file can produce a report with no rows left to monitor.
+**4. Review a decision.** Open **Decision log** to accept or override a decision with a reason. With a model configured, ask a question and inspect its evidence citations. Reviews preserve the original automated conclusion. Open **Docs** for metric definitions and detection criteria.
 
-Run `make demo` again to restart or rebuild. Use `docker compose stop` to stop the app while keeping history. To choose another data directory, run `make demo DEMO_DIR=/path/to/csv-folder`. Mounted files remain read-only; uploads use a separate persistent local volume.
+To stop while keeping history, run `docker compose stop`. For restarts, alternate ports, Docker contexts or your own data directory, see [startup options and troubleshooting](docs/demo-setup.md#restart-stop-and-troubleshoot).
 
-If Docker cannot connect on this development Mac, use `make demo DOCKER='docker --context lima-docker'`. If port 8080 is busy, use `make demo WEB_PORT=8081`. For startup errors, run `docker compose logs --tail=50 api worker` (use the same Docker context as startup).
+## Try your own data or a second domain
 
-## Prepare the three presentation demos (optional)
+Choose **New analysis → Upload CSV** for a UTF-8 CSV with a header row and numeric data (up to 256 MiB by default). Use more rows than the initial window to leave observations for playback.
 
-If you have the Tennessee Eastman export and `uv`, prepare the files once, then follow the quickstart above:
+For a second-domain example, upload the included [synthetic web-service CSV](tests/fixtures/demo_web_service.csv) and use the same **500 / 100 / 1 second** settings. Traffic stays stable while CPU, latency and errors rise; the same detector finds changes without domain-specific code. The [walkthrough](docs/SECOND_DOMAIN_DEMO.md) covers expected evidence, optional reviewed rules and evidence-citing questions, and the limits of causal interpretation.
 
-```bash
-uv run --project backend python scripts/prepare_demo.py te_process.csv
-make demo
-```
-
-The extractor streams the original export, evaluates test run 1 of all 20 faulty scenarios, and selects distinct examples of abrupt change, sustained drift, and broad multichannel change. Ties use the scenario number. Each output contains healthy test runs 1 and 2 followed by one complete faulty test run: **2,880 rows**, with unchanged observations, headers, and sample resets. With a 500-row reference, healthy monitoring precedes the faulted scenario.
-
-Generated files are `runtime/demos/demo_abrupt.csv`, `demo_drift.csv`, and `demo_multichannel.csv`. Selection scores and source provenance remain in ignored `runtime/demo-selection.json`. Files, real-derived metrics, and credentials are excluded from Git and Docker images. Only synthetic data is used for committed fixtures and browser screenshots. Selection metadata never guides live monitoring.
-
-## Try a second domain
-
-Upload the included [synthetic web-service CSV](tests/fixtures/demo_web_service.csv) through **New analysis → Upload CSV**. Use 500 initial samples, 100 per batch and a 1-second interval. Traffic stays stable while CPU, latency and errors rise; the same detector learns references and finds changes without domain-specific code. The [walkthrough](docs/SECOND_DOMAIN_DEMO.md) covers optional reviewed rules, evidence-citing questions, architectural portability and the limits of causal interpretation. No download or model key is needed for deterministic monitoring.
+If you have the Tennessee Eastman export, the [presentation-data guide](docs/demo-setup.md#prepare-the-three-presentation-demos) prepares three complete-run examples: abrupt change, sustained drift and broad multichannel change. This is optional; the quickstart works without downloading data.
 
 ## Understanding and monitoring
 
@@ -52,6 +41,7 @@ Upload the included [synthetic web-service CSV](tests/fixtures/demo_web_service.
 - **Prediction:** per-channel least-squares trend lines on 10 preceding samples forecast the next 5. The report gives chronologically evaluated MAE, signed mean slope and slope variability. Slopes are units per sample, never units per playback second.
 - **Change detection:** adjacent 10-sample mean differences, persistent 50-sample slopes, and fixed-reference level deviations. Temporal rules and reference scales are fixed from the initial window. Windows never bridge invalid values, configured-range violations, ordering gaps or independent runs.
 - **Monitoring:** the latest three batches of sample-level values and five-step-ahead forecasts, with flagged intervals. Scroll horizontally to retrieve older batches; Latest returns to live playback. Each batch has one **OK / Fault Suspected** decision and a separate quality warning. OK means no process rule triggered; insufficient coverage appears prominently beside it.
+- **Confidence:** suspected-fault decisions include Low/High evidence strength with a recorded basis and evidence links. Confidence is not fault probability or severity.
 - **Review:** accept, question or override each batch decision. Overrides specify a status and reason; the latest human assessment is shown beside the preserved automated conclusion. Questions receive asynchronous LLM answers when configured, with follow-up conversation context. Reviews require no name field. Reviews never recalibrate thresholds.
 
 Uploaded files use file row order; prepared demos retain their sample-reset boundaries. Recognized evaluation metadata and sample columns are unavailable as detector inputs. Numeric columns are inferred from the initial window; text columns are not monitored. A short file may be fully consumed by the initial report.
@@ -60,39 +50,14 @@ Natural-language rules use the configured model to propose one threshold, outsid
 
 The reference is provisional. A statistical change is not a fault diagnosis, and a repeated value is not by itself a proven sensor failure. See [architecture](docs/architecture.md) for exact rules, persistence, and model boundaries.
 
-## Optional LLM synthesis and questions
+## Privacy and optional AI
 
-```bash
-cp -n .env.example .env
-# Edit .env: set LLM_ENABLED=true and LLM_API_KEY to your provider key.
-make demo
-```
+Raw observations stay local. Optional model calls receive typed computed summaries and sanitized questions or rule requests with opaque channel IDs. Original column names and evaluation labels are excluded; do not put raw data or secrets in questions. Provider credentials remain backend-only.
 
-The copy command preserves an existing `.env`. Restarting with `make demo` loads the settings; start a new analysis for model-generated initial explanations.
-
-Provider settings remain backend-only. The default Norrin endpoint and exact configured model ID are in `.env.example`; compatible providers can be configured through `LLM_ENDPOINT`, `LLM_MODEL`, and `LLM_API_KEY`. A host-local compatible endpoint can use `host.docker.internal` where supported.
-
-Initial explanations cover every channel in groups of eight. The LLM receives opaque channel IDs and typed computed summaries. Explicit operator questions and up to ten previous completed exchanges from the same decision are sent with decision evidence; original channel names are replaced by IDs, and pasted numerical sequences/evaluation metadata are rejected. Do not put raw data or secrets in questions. Rule proposals send only the sanitized request and eligible opaque channel IDs. The full conversation is stored locally, although model context is limited to ten preceding completed exchanges. Raw observations are never attached to provider requests.
-
-Coverage and evidence references are validated. Failed groups remain visibly unavailable or partial. Model outages do not stop deterministic monitoring or reviews. Fault explanations are generated immediately from metrics; there is no automatic LLM call per monitoring batch. Detailed model attempts remain available through the API, outside the main UI.
+Deterministic monitoring and human reviews work without a model. When enabled, AI adds initial explanations, evidence-citing conversations and rule proposals that require review before Apply. Model outages leave these features visibly unavailable or partial and do not stop monitoring. See [model setup and data boundaries](docs/demo-setup.md#enable-model-explanations-questions-and-rules).
 
 ## Development and validation
 
-Python 3.12, uv, Node 24, pnpm 11.19.0. Locked dependencies are committed.
+For native development, use Python 3.12, uv, Node 24 and pnpm 11.19.0. Locked dependencies are committed. The [development guide](docs/development.md) covers installation, separate services, `make check`, database/browser tests and API type generation.
 
-```bash
-make install
-make db
-make migrate
-make api
-make worker
-make web
-make check
-make test-postgres
-make test-browser          # requires a running synthetic deployment
-make smoke-restart         # synthetic deployment only
-make types                 # after public contract changes
-make smoke-data CSV_PATH=./te_process.csv
-```
-
-See the [development guide](docs/development.md) for environment and isolated test setup, [current state](devlog/current.md) for verified results, [decisions](devlog/decisions.md) for durable choices, and [roadmap](docs/roadmap.md) for unapproved future work.
+See [current state](devlog/current.md) for recorded verification, [architecture](docs/architecture.md) for implementation details, [decisions](devlog/decisions.md) for durable choices, and [roadmap](docs/roadmap.md) for coverage gaps and future work.

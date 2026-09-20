@@ -31,7 +31,7 @@ These are generation assumptions, not configured physical limits or detector thr
 4. To demonstrate natural-language rule extraction, start a fresh analysis with the same file and settings. Before Play, request **“Flag a fault if p95_latency_ms exceeds 400”**. Review that the proposal names the latency channel, uses **> 400**, and has the **Fault Suspected** effect, then click **Apply rule**. The threshold is an explicit operator policy, not a rule inferred from web-service expertise. Play locks the monitoring setup; built-in rules still run independently.
 5. On a flagged decision, ask **“Which measurements support the flagged decision, and do they establish a cause?”** Inspect the answer's evidence links. The answer should discuss supplied measurements and uncertainty, not assert a physical cause. Operator questions can also name a channel; the backend substitutes its opaque ID before model egress.
 
-Rule proposals and discussion require the [optional model configuration](../README.md#optional-llm-synthesis-and-questions). Without it, the report and deterministic replay still work. The isolated QA server produces explicitly synthetic test responses; those verify integration, not live model reasoning. Do not use its canned answers as model-quality evidence.
+Rule proposals and discussion require the [optional model configuration](demo-setup.md#enable-model-explanations-questions-and-rules). Without it, the report and deterministic replay still work. The isolated QA server produces explicitly synthetic test responses; those verify integration, not live model reasoning. Do not use its canned answers as model-quality evidence.
 
 ## How this addresses the challenge
 

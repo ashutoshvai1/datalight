@@ -12,7 +12,7 @@ The default Docker context is machine-specific. On this development machine, an 
 
 ## Checks
 
-Use [DATASET.md](DATASET.md) for the primary testbed's schema, run boundaries, labels, and measured characteristics when preparing or evaluating the demo. Use [architecture](architecture.md) for application behavior and source-adapter limits. The reference's aggregate ranges and known labels must not seed detector thresholds or model prompts. Keep synthetic fixtures for isolated CI checks; the ignored real-data demo can be recreated with `uv run --project backend python scripts/prepare_demo.py te_process.csv` as described in the [README](../README.md).
+Use [DATASET.md](DATASET.md) for the primary testbed's schema, run boundaries, labels, and measured characteristics when preparing or evaluating the demo. Use [architecture](architecture.md) for application behavior and source-adapter limits. The reference's aggregate ranges and known labels must not seed detector thresholds or model prompts. Keep synthetic fixtures for isolated CI checks; the ignored real-data demo can be recreated with `uv run --project backend python scripts/prepare_demo.py te_process.csv` as described in the [presentation-data guide](demo-setup.md#prepare-the-three-presentation-demos).
 
 | Command | Coverage |
 |---|---|
