@@ -6,6 +6,8 @@ Datalight is a generic local CSV understanding and monitoring app. The [primary 
 
 Explicit source setup; initial quality/statistical/prediction report; complete channel synthesis in bounded LLM groups; paused batch replay; sample-level charts; abrupt change, persistent drift and level-deviation rules; evidence-backed batch decisions; separate quality warnings; append-only accept/question/override history and asynchronous answers; recovery and source-identity checks. Three local original-data demos use two healthy runs followed by a faulty run.
 
+The approved demo improvements add local browser uploads, pre-Play channel selection and reviewed AI rule proposals, multi-turn questions, three-batch chart history, an expanded correlation matrix and in-app Docs.
+
 Validation and current limitations are recorded in [current state](../devlog/current.md). The prior foundation remains the storage and recovery basis; the approved simplification supersedes its automatic startup, one-second pacing, partial role hypotheses and per-channel finding UI.
 
 ## Suggestions awaiting approval
@@ -17,10 +19,10 @@ Neither suggestion is implemented.
 
 ## Future work, not approved
 
-- Natural-language operating rules, unit validation and wall-clock timeliness.
+- Richer compound/temporal operating rules, unit validation and wall-clock timeliness.
 - Validated physical fault diagnosis and causal explanations.
 - Lagged relationships, multivariate detectors and domain-specific evaluation.
-- Additional source adapters and a second-domain demonstration. The current reader recognizes the primary testbed's metadata fields and sample-reset convention.
+- Additional source adapters and a second-domain demonstration. Mounted sources retain the sample-reset convention; uploaded CSVs use file row order. Recognized evaluation metadata remains excluded.
 - Full-file replay/storage measurement, retention policy, and a second live provider.
-- Browser uploads, remote streaming, authentication and multi-tenancy.
+- Remote streaming, authentication and multi-tenancy.
 - Baseline or threshold adaptation from human review. Overrides currently change only the recorded human assessment.

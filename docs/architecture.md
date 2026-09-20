@@ -4,11 +4,11 @@ The product is generic CSV understanding, quality assessment, change monitoring 
 
 ## Data flow and interfaces
 
-A read-only data directory feeds a bounded CSV reader. `GET /sources` lists choices, `/sources/preview?path=…` infers numeric channels, and `POST /runs` explicitly creates an analysis with path, initial count, batch size, interval and optional channel limits. Resolved paths, including symlinks, must stay within the configured root. Startup creates no run.
+A read-only data directory feeds a bounded CSV reader. `GET /sources` lists choices, `/sources/preview?path=…` infers numeric channels, and `POST /runs` explicitly creates an analysis with path, initial count, batch size, interval and optional channel limits. Resolved paths, including symlinks, must stay within the configured root. Startup creates no run. `POST /sources/upload` streams a multipart CSV into a separate persistent uploads root with generated filenames and returns an opaque source ID. Preview and run creation also accept that source ID. Uploaded files use file row order; legacy mounted files preserve sample-reset ordering. Evaluation fields and sample remain excluded as features in both modes. Uploads default to a configurable 256 MiB limit; validation is bounded and later malformed records remain ordinary quality evidence.
 
-FastAPI serves versioned `/api/v1` resources. PostgreSQL owns source identities, runs, jobs, reports, evidence, immutable batch decisions, reviews, answers and model attempts. Nginx serves React. The worker has independent replay, initial-interpretation and question loops. OpenAPI generates browser contracts.
+FastAPI serves versioned `/api/v1` resources. PostgreSQL owns source identities, runs, jobs, reports, evidence, immutable batch decisions, reviews, answers and model attempts. Nginx serves React. The worker has independent replay, initial-interpretation, question and rule-proposal loops. OpenAPI generates browser contracts.
 
-A report adds typed per-channel prediction metrics and explanations. `/runs/{id}/decisions` supplies typed decisions plus the current human assessment. `/runs/{id}/trace?channel_id=…` rereads bounded recent source records to return up to 1,000 points and forecasts. `/findings/{id}/reviews` appends reviews; `/findings/{id}/answers` returns persisted answers. Legacy findings, evidence, model-call, audit and SSE resources remain accessible outside the simplified UI.
+A report adds typed per-channel prediction metrics and explanations. `/runs/{id}/decisions` supplies typed decisions plus the current human assessment. `/runs/{id}/trace?channel_id=…` rereads bounded recent source records to return up to 1,000 points and forecasts for legacy callers. The UI supplies `batch_window=3` and optional `end_batch` to retrieve three actual batch windows with their boundary metadata. Older windows are reread on demand; browsing does not load the full history into browser memory. `/findings/{id}/reviews` appends reviews; `/findings/{id}/answers` returns persisted answers. Legacy findings, evidence, model-call, audit and SSE resources remain accessible outside the simplified UI.
 
 ## Temporal analysis
 
@@ -26,7 +26,7 @@ Initial ranges are observational, not physical limits. Configured bounds are che
 
 ## Replay and recovery
 
-The initial report commits in a paused state unless the source is exhausted. Play schedules the first monitoring batch immediately; subsequent batches are scheduled after the configured interval. Batches stop at independent sequence resets and may be shorter than requested. The last partial batch is processed normally.
+The initial report commits in a paused state unless the source is exhausted. Play atomically locks the saved monitoring settings and schedules the first monitoring batch immediately; subsequent batches are scheduled after the configured interval. Batches stop at independent sequence resets and may be shorter than requested. The last partial batch is processed normally.
 
 Source replacement checks use size, mtime, inode, and hashes of the first/last 64 KiB. They are not a full-file cryptographic identity check. Files are assumed static during an analysis. Source changes require a new analysis.
 
@@ -36,10 +36,18 @@ Database triggers prohibit updates/deletes to evidence, findings, reviews, answe
 
 ## Model and review boundaries
 
-Only typed `SummaryPayload` aggregates leave the backend. Initial requests contain at most eight target channels, their profiles/predictions/quality, and up to three strongest relationships per target. Responses must cover exactly those channels and cite their own profile and prediction evidence. Partial group failures remain explicit.
+Only typed aggregate/question payloads and sanitized rule-proposal requests leave the backend. Initial requests contain at most eight target channels, their profiles/predictions/quality, and up to three strongest relationships per target. Responses must cover exactly those channels and cite their own profile and prediction evidence. Partial group failures remain explicit.
 
-Questions are explicit user-provided text plus aggregate decision evidence and forecast errors. Original names are replaced with opaque IDs; numerical sequences and evaluation metadata are rejected. No raw CSV rows, observation arrays, original names or evaluation values are attached. Questions cannot change rules or decisions. Credentials stay in the authorization header, redirects are disabled, responses are bounded, and reflected configured keys are redacted.
+Questions are explicit user-provided text plus aggregate decision evidence and forecast errors. Each job snapshots at most ten preceding completed exchanges from the same finding; retries reuse that context. Only one question may be pending per decision. The complete local transcript remains available. Prior model answers supply conversational context, not new evidence. Original names are replaced with opaque IDs; numerical sequences and evaluation metadata are rejected. No raw CSV rows, observation arrays, original names or evaluation values are attached. Questions cannot change rules or decisions. Credentials stay in the authorization header, redirects are disabled, responses are bounded, and reflected configured keys are redacted.
 
 Every model attempt stores its purpose, request, response/status and timestamps. Interrupted calls have an unknown outcome before retry; exactly-once external execution is not promised. Local publication remains idempotent under job leases. Evidence validation does not establish that a model explanation is correct.
 
-One decision is appended for each monitoring batch, including OK. Accept, question and override append history. The latest accept/override determines the displayed human assessment; a question does not change it. Accept returns to the automated assessment, and override requires OK/Fault Suspected plus a reason. No action recalibrates the initial reference. Operators are self-declared names in a trusted local deployment; authentication and multi-tenancy are not included.
+One decision is appended for each monitoring batch, including OK. Accept, question and override append history. The latest accept/override determines the displayed human assessment; a question does not change it. Accept returns to the automated assessment, and override requires OK/Fault Suspected plus a reason. No action recalibrates the initial reference. New reviews default to Local user without a name input; existing named history is preserved. Authentication and multi-tenancy are not included.
+
+## Monitoring configuration and user rules
+
+After the initial report, `POST /runs/{id}/monitoring-config` saves excluded channel IDs and retained applied-rule IDs. At least one numeric channel is required. These settings lock at first Play, even if playback is immediately paused. The original understanding report and fixed references remain unchanged; excluded channels no longer contribute monitoring profiles, checks, coverage, forecasts or model summaries.
+
+`POST /runs/{id}/rule-proposals` creates a leased model job from a sanitized request and eligible opaque channel IDs. A proposal supports one comparison (`gt`, `gte`, `lt`, `lte`), outside an inclusive range, or missing-value check. Blank values are missing; invalid numbers remain separate quality failures. Proposals contain no code. Unknown channels, nonfinite thresholds, ambiguous effects and unsupported compound/temporal requests cannot be applied. The proposal GET endpoint exposes status and the typed candidate; its `/apply` endpoint revalidates eligibility and the first-Play lock under the run lock.
+
+Applied rules are versioned in run configuration. Fault-effect violations contribute to Fault Suspected; quality-effect violations only add warnings. Rules evaluate independently of temporal quality masking and never recalibrate references. Each batch records typed rule matches and immutable evidence with rule ID/version, criterion, violation count and intervals. Pending or failed proposals have no monitoring effect.

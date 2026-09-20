@@ -2,7 +2,7 @@
 
 ## Objective
 
-Implement the approved simplification: explicit CSV setup → initial understanding → paused monitoring → one evidence-backed decision per batch → append-only review and questions. Implementation and local deployment verification are complete.
+Implement the approved simplification: explicit CSV setup → initial understanding → paused monitoring → one evidence-backed decision per batch → append-only review and questions. Previous simplification is complete; approved demo improvements are now in progress.
 
 The product remains generic. [DATASET.md](../docs/DATASET.md) is offline testbed context, never runtime model knowledge. Prior foundation verification is preserved in [the historical handoff](foundation-verification.md).
 
@@ -19,6 +19,7 @@ The product remains generic. [DATASET.md](../docs/DATASET.md) is offline testbed
 
 | Workstream | Owner | Status | Integration surface |
 |---|---|---|---|
+| [Demo improvements](workstreams/demo-improvements.md) | Integration agent | In progress | Uploads, setup/rules, conversations, charts, Docs |
 | [Simplification](workstreams/simplification.md) | Current agent | Complete; deployed on localhost:8080 | Backend, UI, migrations, local demos, documentation |
 | [Foundation](workstreams/foundation.md) | Prior handoff | Retained as storage/recovery basis | Historical reports and reviews |
 

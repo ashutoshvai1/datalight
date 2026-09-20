@@ -3,8 +3,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import { number, type PageProps } from "../api";
 import { Badge, Empty } from "../components";
 import { Chart } from "../Chart";
+import MonitoringSetup from "../MonitoringSetup";
 
-export default function Understanding({ report, showEvidence }: PageProps) {
+export default function Understanding({ run, report, showEvidence }: PageProps) {
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState("");
   const [params] = useSearchParams();
@@ -51,6 +52,7 @@ export default function Understanding({ report, showEvidence }: PageProps) {
           Go to monitoring →
         </Link>
       </div>
+      <MonitoringSetup run={run} report={report} />
       <section className="panel">
         <div className="section-heading">
           <h2>Channel profiles</h2>

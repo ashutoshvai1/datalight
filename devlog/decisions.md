@@ -2,7 +2,7 @@
 
 ## D001 — Progressive replay, not full import
 
-The default source is a read-only mounted CSV. Initial analysis and subsequent batches use bounded windows with record-aligned checkpoints. This keeps startup independent of the full dataset's size. Source changes require a new analysis. See [architecture](../docs/architecture.md).
+The default source is a read-only mounted CSV; explicit browser uploads use a separate persistent local volume. Initial analysis and subsequent batches use bounded windows with record-aligned checkpoints. This keeps startup independent of the full dataset's size. Source changes require a new analysis. See [architecture](../docs/architecture.md).
 
 ## D002 — One operational database
 
@@ -22,7 +22,7 @@ An OpenAI-compatible HTTP adapter accepts only typed aggregate summaries. Norrin
 
 ## D006 — Human review preserves history
 
-Accept/question/override records are append-only, with self-declared operator names. An override revises the human assessment, not the original machine record or future monitoring. Changing rules, thresholds, or baselines is a separate decision.
+Accept/question/override records are append-only, with a default Local user identity and preserved historical names. An override revises the human assessment, not the original machine record or future monitoring. Changing rules, thresholds, or baselines is a separate decision.
 
 ## D007 — Context has owners
 
@@ -47,3 +47,11 @@ Rolling 10-sample OLS predicts five horizons; 20-sample adjacent-mean changes, 5
 ## D012 — One batch decision and append-only discussion
 
 Every monitoring batch has one automated decision. Accept/question/override and model answers preserve it. Latest accept/override determines the visible human assessment without adapting the baseline. The simplified UI hides processing ledgers and model wire payloads while retaining backend traceability. Auto-pause and a last-value forecast comparator remain unapproved suggestions.
+
+## D013 — Approved demo improvements
+
+Browser uploads use file row order and keep raw observations local. Legacy mounted sources retain their ordering convention; recognized metadata never becomes a feature. After understanding, users may exclude numeric channels and explicitly apply AI-proposed single-channel rules. First Play locks both settings atomically. The initial report and reference values remain unchanged.
+
+Rule compilation sends only a sanitized explicit request and eligible opaque IDs. Deterministic comparisons, outside-range and missing-value checks produce separate typed evidence and a reviewed fault/quality effect; no model-generated code runs. Questions now include up to ten preceding completed exchanges scoped to the decision, with frozen per-job context and a complete local transcript. Reviews no longer require a name. See [architecture](../docs/architecture.md).
+
+Monitoring defaults to three actual batches and rereads older local windows on demand. A standalone Docs tab explains implemented metrics, detection criteria and evidence; no physical-fault catalogue is inferred from the demo.

@@ -34,6 +34,33 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
   return response.json();
 }
 
+export function uploadCsv(
+  file: File,
+  progress: (percent: number) => void,
+): Promise<components["schemas"]["SourceView"]> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", "/api/v1/sources/upload");
+    request.responseType = "json";
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable)
+        progress(Math.round((event.loaded / event.total) * 100));
+    };
+    request.onerror = () => reject(new Error("Upload interrupted. Please try again."));
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) resolve(request.response);
+      else reject(new Error(typeof request.response?.detail === "string"
+        ? request.response.detail
+        : request.status === 413
+          ? "This CSV exceeds the configured upload size limit."
+          : "CSV upload failed. Please try again."));
+    };
+    const form = new FormData();
+    form.append("file", file);
+    request.send(form);
+  });
+}
+
 export const number = (n: number | null | undefined, digits = 3) =>
   n == null
     ? "—"

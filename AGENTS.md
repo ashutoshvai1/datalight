@@ -14,12 +14,13 @@ Read [DATASET.md](docs/DATASET.md) when working on testbed ingestion, offline ev
 
 ## Non-negotiable boundaries
 
-- Raw observations stay local. Only the typed payload in `backend/src/datalight/providers.py` (computed aggregates and explicit operator questions) may reach a model. Questions replace channel names with opaque IDs and reject pasted observation sequences/evaluation metadata. Never send rows, observation sequences, evaluation labels, secrets, or original column names to the provider.
-- Keep `faultNumber`, `fault_status`, `source`, and `simulationRun` outside detector inputs and prompts. `sample` serves ordering only. Do not infer physical roles from recognizable dataset/header names.
+- Raw observations stay local. Only typed aggregate/question and rule-proposal payloads in `backend/src/datalight/providers.py` (computed aggregates and explicit operator questions) may reach a model. Questions and rule requests replace channel names with opaque IDs and reject pasted observation sequences/evaluation metadata. Never send rows, observation sequences, evaluation labels, secrets, or original column names to the provider.
+- Keep `faultNumber`, `fault_status`, `source`, and `simulationRun` outside detector inputs and prompts. `sample` is never a detector feature; legacy sources use it for ordering, while uploaded CSVs use file row order. Do not infer physical roles from recognizable dataset/header names.
 - Keep dataset-specific conventions in ingestion adapters or offline preparation/evaluation tools. Do not hardcode this testbed's channel count, names, run lengths, fault catalogue, value ranges, or update cadence into core analysis, UI contracts, or prompts. `DATASET.md` is not model context; any future domain rules require an explicit, versioned configuration rather than implicit use of this reference.
 - Respect sequence boundaries. Do not concatenate separate runs into temporal evidence or invent timestamps/units.
 - Treat the initial window as provisional. Quality defects, deviations, hypotheses, and causal diagnoses are different claims.
 - Every conclusion needs evidence, an uncertainty/basis statement, and traceability. Do not display fabricated metrics or placeholder findings as real results.
+- Monitoring channel selection and explicitly applied rules lock at first Play. Rule proposals never execute model-generated code or implicitly alter fixed references.
 - Reviews append history; they never erase evidence, alter original findings, or silently change thresholds/baselines.
 - Batch results and checkpoints commit together. Preserve source identity, bounded memory, job leases, and retry safety.
 - Exclude real datasets and credentials from Git, images, logs, fixtures, and screenshots. Synthetic fixtures are explicitly allowed.

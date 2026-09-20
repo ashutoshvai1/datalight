@@ -1,0 +1,20 @@
+# Synthetic-only verification. Never attach real datasets to this override.
+services:
+  api:
+    environment: &model-settings
+      LLM_ENABLED: "true"
+      LLM_ENDPOINT: http://model:8090/v1/chat/completions
+      LLM_MODEL: synthetic-test-model
+      LLM_API_KEY: ""
+    ports:
+      - "127.0.0.1:18000:8000"
+  worker:
+    environment: *model-settings
+  db:
+    ports:
+      - "127.0.0.1:15433:5432"
+  model:
+    image: python:3.12-slim
+    command: [python, /fixture/model_server.py]
+    volumes:
+      - ./tests/fixtures/model_server.py:/fixture/model_server.py:ro

@@ -5,22 +5,38 @@ import {
   Route,
   Routes,
   useNavigate,
+  useLocation,
   useSearchParams,
 } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, FileText, ListChecks, Plus } from "lucide-react";
-import { api, type Report, type Run, type System } from "./api";
+import { Activity, BookOpen, FileText, ListChecks, Plus } from "lucide-react";
+import { api, uploadCsv, type Report, type Run, type System } from "./api";
 import type { components } from "./generated/api";
 import { ErrorNotice, EvidenceDrawer } from "./components";
 import Understanding from "./pages/Understanding";
 import Monitoring from "./pages/Monitoring";
 import DecisionLog from "./pages/DecisionLog";
+import Docs from "./pages/Docs";
+
+const tagline = "Illuminate your data. Talk to it. Evidence centric analysis. Your data stays private.";
 
 type Choice = components["schemas"]["SourceChoice"];
 type Preview = components["schemas"]["SourcePreview"];
 
 function Setup({ done }: { done: (run: Run) => void }) {
   const [path, setPath] = useState<string | null>(null);
+  const [uploaded, setUploaded] = useState<components["schemas"]["SourceView"] | null>(null);
+  const [progress, setProgress] = useState(0);
+  const upload = useMutation({
+    mutationFn: (file: File) => {
+      setProgress(0);
+      return uploadCsv(file, setProgress);
+    },
+    onSuccess: (source) => {
+      setUploaded(source);
+      setLimits({});
+    },
+  });
   const [initial, setInitial] = useState(500);
   const [batch, setBatch] = useState(100);
   const [interval, setInterval] = useState(10);
@@ -33,15 +49,15 @@ function Setup({ done }: { done: (run: Run) => void }) {
   });
   const selectedPath = path ?? choices.data?.[0]?.path ?? "";
   const preview = useQuery({
-    queryKey: ["preview", selectedPath],
+    queryKey: ["preview", uploaded?.id ?? selectedPath],
     queryFn: () =>
-      api<Preview>(`/sources/preview?path=${encodeURIComponent(selectedPath)}`),
-    enabled: !!selectedPath,
+      api<Preview>(`/sources/preview?${uploaded ? `source_id=${encodeURIComponent(uploaded.id)}` : `path=${encodeURIComponent(selectedPath)}`}`),
+    enabled: !!uploaded || !!selectedPath,
   });
   const start = useMutation({
     mutationFn: () =>
       api<Run>("/runs", {
-        path: selectedPath,
+        ...(uploaded ? { source_id: uploaded.id } : { path: selectedPath }),
         initial_rows: initial,
         batch_rows: batch,
         interval,
@@ -64,8 +80,8 @@ function Setup({ done }: { done: (run: Run) => void }) {
       <div className="page-heading">
         <div>
           <span className="eyebrow">START AN ANALYSIS</span>
+          <p className="hero-tagline">{tagline}</p>
           <h1>Understand first. Monitor next.</h1>
-          <p>Choose a local CSV and set the pace of your demo.</p>
         </div>
       </div>
       <form
@@ -79,13 +95,15 @@ function Setup({ done }: { done: (run: Run) => void }) {
           CSV path
           <input
             list="demo-sources"
-            value={selectedPath}
+            value={uploaded ? "" : selectedPath}
             onChange={(e) => {
+              setUploaded(null);
               setPath(e.target.value);
               setLimits({});
             }}
-            required
-            placeholder="demo_abrupt.csv"
+            required={!uploaded}
+            disabled={upload.isPending}
+            placeholder={uploaded ? "Choose a different mounted CSV" : "demo_abrupt.csv"}
           />
         </label>
         <datalist id="demo-sources">
@@ -99,9 +117,11 @@ function Setup({ done }: { done: (run: Run) => void }) {
           {choices.data?.map((c) => (
             <button
               type="button"
-              className={selectedPath === c.path ? "primary" : ""}
+              className={!uploaded && selectedPath === c.path ? "primary" : ""}
               key={c.path}
+              disabled={upload.isPending}
               onClick={() => {
+                setUploaded(null);
                 setPath(c.path);
                 setLimits({});
               }}
@@ -110,10 +130,21 @@ function Setup({ done }: { done: (run: Run) => void }) {
             </button>
           ))}
         </div>
-        <p>
-          Paths are relative to the mounted data directory. Raw observations
-          stay local.
-        </p>
+        <div className="upload-area">
+          <label htmlFor="csv-upload">Upload CSV</label>
+          <input id="csv-upload" type="file" accept=".csv,text/csv"
+            disabled={upload.isPending}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) upload.mutate(file);
+              event.target.value = "";
+            }} />
+          {upload.isPending && <div role="status">
+            <progress aria-label="CSV upload progress" value={progress} max={100} />
+            <span>{progress < 100 ? `Uploading ${progress}%` : "Checking CSV…"}</span>
+          </div>}
+          {uploaded && <p className="selected-upload" role="status">Selected: <strong>{uploaded.name}</strong></p>}
+        </div>
         <div className="setup-grid">
           <label>
             Initial samples
@@ -198,10 +229,10 @@ function Setup({ done }: { done: (run: Run) => void }) {
             </table>
           </div>
         </details>
-        <ErrorNotice error={choices.error || preview.error || start.error} />
+        <ErrorNotice error={upload.error || preview.error || start.error || (!uploaded && choices.error)} />
         <button
           className="primary"
-          disabled={start.isPending || !preview.data || preview.isFetching}
+          disabled={upload.isPending || start.isPending || !preview.data || preview.isFetching}
         >
           {" "}
           {start.isPending ? "Starting…" : "Build understanding report"}
@@ -215,6 +246,8 @@ function Setup({ done }: { done: (run: Run) => void }) {
 export default function App() {
   const client = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
+  const showingDocs = location.pathname === "/docs";
   const [params, setParams] = useSearchParams();
   const [setup, setSetup] = useState(false);
   const [evidence, setEvidence] = useState<string | null>(null);
@@ -282,16 +315,17 @@ export default function App() {
             <ListChecks size={18} />
             Decision log
           </NavLink>
+          <NavLink to={`/docs${search}`} onClick={() => setSetup(false)}><BookOpen size={18} />Docs</NavLink>
         </nav>
         <div className="sidebar-bottom">
           <span className="local-indicator">Local workspace</span>
-          <p>Evidence first. Human judgment stays in the loop.</p>
+          <p>{tagline}</p>
         </div>
       </aside>
       <div className="main-shell">
         <header className="topbar">
           <span>
-            {showingSetup
+            {showingDocs ? "Docs" : showingSetup
               ? "New analysis"
               : selectedRun
                 ? "Historical analysis"
@@ -314,7 +348,7 @@ export default function App() {
                 </option>
               ))}
             </select>
-            <button onClick={() => setSetup(true)}>
+            <button onClick={() => { setSetup(true); navigate(`/understanding${search}`); }}>
               <Plus size={16} />
               New analysis
             </button>
@@ -329,7 +363,7 @@ export default function App() {
               (run?.error ? new Error(run.error) : null)
             }
           />
-          {showingSetup ? (
+          {showingDocs ? <Docs /> : showingSetup ? (
             <Setup done={done} />
           ) : pageProps ? (
             <Routes>

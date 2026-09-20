@@ -69,7 +69,7 @@ test("setup, paused report, sample chart, review and end of file", async ({
   ).toBeVisible();
   const card = page.locator(".decision-card").first();
   await card.getByRole("button", { name: "Override", exact: true }).click();
-  await card.getByLabel("Your name").fill("Browser QA");
+  await expect(card.getByLabel("Your name")).toHaveCount(0);
   await card.getByLabel("Override reason").fill("Synthetic operator review.");
   await card
     .getByRole("combobox", { name: "Human assessment", exact: true })
@@ -81,14 +81,16 @@ test("setup, paused report, sample chart, review and end of file", async ({
       .first(),
   ).toBeVisible();
   await card.getByRole("button", { name: "Question", exact: true }).click();
-  await expect(card.getByLabel("Your name")).toHaveValue("Browser QA");
+  await expect(card.getByLabel("Your name")).toHaveCount(0);
   await card
     .getByLabel("Your question")
     .fill("Why did the automated rule choose this status?");
   await card.getByRole("button", { name: "Ask question", exact: true }).click();
-  await expect(
-    card.getByText(/Model interpretation is disabled/),
-  ).toBeVisible();
+  if (process.env.MODEL_QA === "1") {
+    await expect(card.getByText(/Synthetic answer/).first()).toBeVisible();
+  } else {
+    await expect(card.getByText(/Model interpretation is disabled/)).toBeVisible();
+  }
   await page.reload();
   await expect(
     page

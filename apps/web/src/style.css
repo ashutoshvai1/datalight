@@ -1277,3 +1277,38 @@ footer span {
     flex-wrap: wrap;
   }
 }
+
+/* New-analysis message and local source selection. */
+.page-heading .hero-tagline {
+  max-width: 900px;
+  margin: 14px 0 24px;
+  color: #245a49;
+  font-size: clamp(22px, 2.5vw, 34px);
+  line-height: 1.35;
+  font-weight: 550;
+  letter-spacing: -0.025em;
+}
+.upload-area { padding: 16px; border: 1px dashed #c2d3c7; border-radius: 6px; background: #f7faf5; }
+.upload-area input { margin: 10px 0; }
+.upload-area progress { width: min(300px, 65%); margin-right: 12px; accent-color: #285e4d; }
+.selected-upload { overflow-wrap: anywhere; }
+.monitoring-setup h3 { margin: 22px 0 10px; }
+.channel-selection-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.channel-selection { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; max-height: 250px; overflow: auto; padding: 2px; }
+.channel-option { display: flex; flex-direction: row; align-items: flex-start; gap: 9px; font-weight: 400; }
+.channel-option input { flex: 0 0 auto; margin-top: 3px; accent-color: #285e4d; }
+.channel-option span { min-width: 0; overflow-wrap: anywhere; }
+.channel-option small { display: block; font-size: 11px; font-weight: 400; color: #6c7f72; margin-top: 3px; }
+.monitoring-setup textarea { width: 100%; margin: 8px 0 12px; }
+.rule-label { display: flex; align-items: center; gap: 8px; }
+.help-tip { position: relative; display: inline-flex; }
+.help-tip > button { border-radius: 50%; padding: 0; height: 21px; width: 21px; font-size: 12px; }
+.help-tip [role="tooltip"] { display: none; position: absolute; bottom: 28px; left: -150px; width: min(310px, 65vw); background: #173e32; color: white; padding: 12px; border-radius: 6px; z-index: 10; font-size: 12px; font-weight: 400; box-shadow: 0 4px 16px #142e2725; }
+.help-tip:hover [role="tooltip"], .help-tip:focus-within [role="tooltip"] { display: block; }
+.rule-proposal { padding: 16px; margin-top: 14px; border-left: 3px solid #285e4d; background: #f0f6ee; }
+.rule-proposal p { margin: 8px 0 14px; }
+.applied-rules { padding-left: 20px; }
+.applied-rules li { padding: 8px 0; }
+.applied-rules li button { margin-left: 14px; }
+.setup-save { margin-top: 20px; font-size: 12px; }
+@media (max-width: 700px) { .channel-selection { grid-template-columns: 1fr; } }
