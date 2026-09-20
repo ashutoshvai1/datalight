@@ -286,7 +286,9 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
 
     @app.post("/api/v1/findings/{finding_id}/reviews", response_model=s.ReviewView, status_code=201)
     def review(finding_id: str, body: s.ReviewCreate, session: DB):
-        finding = session.get(m.Finding, finding_id)
+        finding = session.scalar(
+            select(m.Finding).where(m.Finding.id == finding_id).with_for_update()
+        )
         if finding is None:
             raise HTTPException(404, "Finding not found")
         if (
@@ -295,12 +297,43 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
             and body.replacement not in ("OK", "Fault Suspected")
         ):
             raise HTTPException(422, "Choose OK or Fault Suspected.")
+        question = None
+        conversation = []
         if body.action == "question" and finding.category == "decision":
             run = get_run(session, finding.run_id)
-            try:
-                providers.question_text(
-                    body.reason, s.ReportView.model_validate(run.report), settings
+            pending = session.scalar(
+                select(m.Review.id)
+                .outerjoin(m.Answer, m.Answer.review_id == m.Review.id)
+                .where(
+                    m.Review.finding_id == finding_id,
+                    m.Review.action == "question",
+                    m.Answer.id.is_(None),
                 )
+                .limit(1)
+            )
+            if pending:
+                raise HTTPException(409, "Wait for the current answer before asking a follow-up.")
+            report = s.ReportView.model_validate(run.report)
+            try:
+                question = providers.question_text(body.reason, report, settings)
+                previous = session.execute(
+                    select(m.Review, m.Answer)
+                    .join(m.Answer, m.Answer.review_id == m.Review.id)
+                    .where(
+                        m.Review.finding_id == finding_id,
+                        m.Review.action == "question",
+                        m.Answer.status == "succeeded",
+                    )
+                    .order_by(m.Review.created_at.desc(), m.Review.id.desc())
+                    .limit(10)
+                ).all()
+                conversation = [
+                    providers.ConversationTurn(
+                        question=providers.question_text(review.reason, report, settings),
+                        answer=providers.question_text(answer.text, report, settings, answer=True),
+                    ).model_dump()
+                    for review, answer in reversed(previous)
+                ]
             except ValueError as exc:
                 raise HTTPException(422, str(exc)) from exc
         value = m.Review(finding_id=finding_id, **body.model_dump())
@@ -322,7 +355,11 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
                         run_id=finding.run_id,
                         kind="question",
                         task_key=value.id,
-                        payload={"review_id": value.id},
+                        payload={
+                            "review_id": value.id,
+                            "question": question,
+                            "conversation": conversation,
+                        },
                     )
                 )
         service.event(

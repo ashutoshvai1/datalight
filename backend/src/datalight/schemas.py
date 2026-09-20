@@ -255,7 +255,7 @@ class EvidenceView(Contract):
 
 class ReviewCreate(Contract):
     action: Literal["accept", "question", "override"]
-    operator: str = Field(min_length=1, max_length=100)
+    operator: str = Field(default="Local user", min_length=1, max_length=100)
     reason: str = Field(default="", max_length=4000)
     replacement: str | None = Field(default=None, max_length=4000)
 

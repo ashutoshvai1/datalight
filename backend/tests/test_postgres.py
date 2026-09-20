@@ -105,3 +105,35 @@ def test_postgres_evidence_rejects_mutation(pg_store):
     with pytest.raises(DBAPIError, match="append-only"):
         with factory.begin() as session:
             session.execute(text("UPDATE evidence SET kind = 'changed'"))
+
+
+def test_postgres_only_one_question_can_be_pending(pg_store):
+    from fastapi.testclient import TestClient
+    from pydantic import SecretStr
+
+    from datalight.api import create_app
+
+    settings, factory = pg_store
+    settings.llm_enabled = True
+    settings.llm_api_key = SecretStr("synthetic-provider-key")
+    client = TestClient(create_app(settings, factory))
+    rid = client.post("/api/v1/runs", json={"interval": 0}).json()["id"]
+    service.replay(factory, settings, *service.claim(factory, "replay"))
+    client.post(f"/api/v1/runs/{rid}/control", json={"action": "resume"})
+    service.replay(factory, settings, *service.claim(factory, "replay"))
+    finding_id = client.get(f"/api/v1/runs/{rid}/decisions").json()[0]["id"]
+
+    def ask(_):
+        with TestClient(create_app(settings, factory)) as requester:
+            return requester.post(
+                f"/api/v1/findings/{finding_id}/reviews",
+                json={"action": "question", "reason": "Explain the evidence."},
+            ).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(ask, range(2))) == [201, 409]
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(m.Review)) == 1
+        assert session.scalar(
+            select(func.count()).select_from(m.Job).where(m.Job.kind == "question")
+        ) == 1

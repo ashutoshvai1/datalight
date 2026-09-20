@@ -412,12 +412,25 @@ def interpret(factory, settings, job_id, token, transport=None):
             review = session.get(m.Review, data["review_id"])
             finding = session.get(m.Finding, review.finding_id)
             decision = Decision.model_validate(finding.details)
-            targets = sorted({t.channel_id for t in decision.triggers}) or [
+            question = data.get("question") or providers.question_text(review.reason, report, settings)
+            excluded = set(run.config.get("excluded_channel_ids", []))
+            # Keep the original report for privacy sanitization above; only monitored
+            # channels and relationships enter the decision's model context.
+            report = report.model_copy(update={
+                "profiles": [p for p in report.profiles if p.id not in excluded],
+                "correlations": [
+                    pair for pair in report.correlations
+                    if pair.left not in excluded and pair.right not in excluded
+                ],
+            })
+            targets = sorted({t.channel_id for t in decision.triggers if t.channel_id not in excluded}) or [
                 p.id for p in report.profiles
             ]
             summary = providers.summarize(report, targets)
             selected: dict[tuple[str, str], Trigger] = {}
             for trigger in decision.triggers:
+                if trigger.channel_id in excluded:
+                    continue
                 key = (trigger.channel_id, trigger.kind)
                 if key not in selected or trigger.score > selected[key].score:
                     selected[key] = trigger
@@ -439,11 +452,15 @@ def interpret(factory, settings, job_id, token, transport=None):
                 assessed=decision.coverage.assessed,
                 total=decision.coverage.total,
                 evidence_ids=list(dict.fromkeys([decision_evidence, *finding.evidence_ids])),
-                forecast_errors=decision.forecast_errors,
+                forecast_errors={
+                    cid: metric for cid, metric in decision.forecast_errors.items()
+                    if cid not in excluded
+                },
                 quality_checks=[
                     Check.model_validate(e.details)
                     for eid in finding.evidence_ids
                     if (e := session.get(m.Evidence, eid)) and e.kind == "quality"
+                    and e.details.get("name", "").split(":")[-1] not in excluded
                 ],
                 triggers=[
                     providers.DerivedTrigger(
@@ -452,7 +469,11 @@ def interpret(factory, settings, job_id, token, transport=None):
                     for t in selected.values()
                 ],
             )
-            summary.question = providers.question_text(review.reason, report, settings)
+            summary.question = question
+            summary.conversation = [
+                providers.ConversationTurn.model_validate(turn)
+                for turn in data.get("conversation", [])
+            ]
         else:
             summary = providers.summarize(report, data.get("channel_ids"))
         payload = providers.request_payload(summary, settings.llm_model)
