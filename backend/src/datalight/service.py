@@ -21,6 +21,35 @@ def coordination_lock(session):
         session.execute(text("SELECT pg_advisory_xact_lock(724901)"))
 
 
+def cancel_pending_job(session, job, reason):
+    """Publish a terminal result before revoking a locked job's lease."""
+    if job.status not in ("queued", "leased"):
+        return
+    data = job.payload or {}
+    if job.kind == "question" and not session.scalar(
+        select(m.Answer.id).where(m.Answer.review_id == data["review_id"])
+    ):
+        session.add(
+            m.Answer(
+                review_id=data["review_id"],
+                status="unavailable",
+                text=reason,
+                evidence_ids=[],
+            )
+        )
+    elif job.kind == "rule_proposal" and data.get("result", {}).get("status") in (None, "pending"):
+        job.payload = {
+            **data,
+            "result": {
+                "id": job.task_key,
+                "status": "unavailable",
+                "rule": None,
+                "message": reason,
+            },
+        }
+    job.status, job.lease_token, job.lease_until = "cancelled", None, None
+
+
 def create_run(session, source, config):
     run = m.Run(source_id=source.id, config=config.model_dump())
     session.add(run)

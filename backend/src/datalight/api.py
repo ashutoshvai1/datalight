@@ -157,7 +157,11 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
                     effective_status=review.replacement
                     if review and review.action == "override"
                     else decision.status,
-                    human_assessment=f"{review.action.capitalize()} by {review.operator}"
+                    human_assessment=(
+                        {"accept": "Accepted", "override": "Overridden"}[review.action]
+                        if review.operator == "Local user"
+                        else f"{review.action.capitalize()} by {review.operator}"
+                    )
                     if review
                     else None,
                     created_at=finding.created_at,
@@ -358,9 +362,11 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         ):
             old.status = "stopped"
             for job in session.scalars(
-                select(m.Job).where(m.Job.run_id == old.id).with_for_update()
+                select(m.Job)
+                .where(m.Job.run_id == old.id, m.Job.status.in_(["queued", "leased"]))
+                .with_for_update()
             ):
-                job.status = "cancelled"
+                service.cancel_pending_job(session, job, "A new analysis was started.")
             service.event(
                 session, old.id, "run.stopped", {"reason": "A new analysis was requested."}
             )
