@@ -59,3 +59,7 @@ Monitoring defaults to three actual batches and rereads older local windows on d
 ## D014 — Sidebar message and one-command demo
 
 The 2026-09-20 follow-up keeps the product tagline only in the sidebar, with one sentence per line; the setup heading remains “Understand first. Monitor next.”. `make demo` starts the local stack and waits for health, selecting prepared demos when present or the synthetic fixture otherwise. Dataset preparation and optional model configuration remain separate from the minimal quickstart.
+
+## D015 — Deterministic suspected-fault confidence
+
+The approved evidence-v1 policy assigns Low/High evidence strength per automated fault decision, independently of fault status, severity and model availability. High requires persistent evidence and, for built-in detectors, a usable initial profile with 50 reference measurements. See [architecture](../docs/architecture.md) for exact criteria and compatibility. Counters cross batch boundaries and commit with the checkpoint; reviews preserve the recorded confidence. No probability calibration, threshold adaptation or history backfill is implied.

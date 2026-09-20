@@ -1709,6 +1709,89 @@
         ],
         "title": "Column"
       },
+      "ConfidenceBasis": {
+        "properties": {
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "abrupt",
+              "level",
+              "drift",
+              "rule"
+            ],
+            "title": "Kind"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          },
+          "observed_persistence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Observed Persistence"
+          },
+          "required_persistence": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Required Persistence"
+          },
+          "reference_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Count"
+          },
+          "reference_usable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Usable"
+          },
+          "evaluated_at": {
+            "type": "integer",
+            "title": "Evaluated At"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel_id",
+          "kind",
+          "observed_persistence",
+          "required_persistence",
+          "evaluated_at",
+          "evidence_ids"
+        ],
+        "title": "ConfidenceBasis"
+      },
       "Correlation": {
         "properties": {
           "left": {
@@ -1843,6 +1926,16 @@
           "row_end": {
             "type": "integer",
             "title": "Row End"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionConfidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -1857,6 +1950,47 @@
           "row_end"
         ],
         "title": "Decision"
+      },
+      "DecisionConfidence": {
+        "properties": {
+          "level": {
+            "type": "string",
+            "enum": [
+              "low",
+              "high"
+            ],
+            "title": "Level"
+          },
+          "policy_version": {
+            "type": "string",
+            "const": "evidence-v1",
+            "title": "Policy Version",
+            "default": "evidence-v1"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          },
+          "basis": {
+            "$ref": "#/components/schemas/ConfidenceBasis"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "level",
+          "explanation",
+          "evidence_ids",
+          "basis"
+        ],
+        "title": "DecisionConfidence"
       },
       "DecisionView": {
         "properties": {

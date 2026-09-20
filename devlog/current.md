@@ -2,7 +2,7 @@
 
 ## Objective
 
-The approved demo improvements are implemented, verified and deployed locally: sidebar product message, CSV upload, pre-Play channel selection and reviewed AI rules, multi-turn questions, clearer evidence/matrix, three-batch chart history and Docs.
+The approved suspected-fault confidence feature is implemented: deterministic Low/High evidence strength, persisted calculation basis, evidence links, question context and monitoring/decision-card labels. It builds on the completed demo improvements and is deployed to synthetic QA on localhost:18080. The operator deployment on localhost:8080 still runs the prior demo-improvements build until rebuilt.
 
 The product remains generic. [DATASET.md](../docs/DATASET.md) is offline testbed context. Earlier foundation verification is preserved in [the historical handoff](foundation-verification.md).
 
@@ -12,6 +12,7 @@ The product remains generic. [DATASET.md](../docs/DATASET.md) is offline testbed
 - Evaluation metadata and sample never become detector features. Uploaded CSVs use file row order; legacy mounted sources retain sequence resets.
 - Initial references remain provisional and fixed. Exclusions and explicitly applied deterministic rules lock at first Play.
 - Quality warnings stay separate from process status unless the user explicitly applied a fault-effect rule. Insufficient coverage retains OK with a visible limitation.
+- Confidence describes evidence strength, not probability or severity. Fixed evidence-v1 criteria and initial references remain provisional; historical decisions and reviews are not rewritten.
 - One active replay; bounded reading, source identity checks, atomic batch/checkpoint commits and append-only evidence/reviews remain intact.
 - Compound/temporal custom rules, auto-pause and a last-value predictor comparator remain outside implemented scope.
 
@@ -19,6 +20,7 @@ The product remains generic. [DATASET.md](../docs/DATASET.md) is offline testbed
 
 | Workstream | Owner | Status | Integration surface |
 |---|---|---|---|
+| [Fault confidence](workstreams/confidence.md) | Integration agent | Complete; synthetic QA verified | Persistence counters, decision JSON, provider aggregates, UI and Docs |
 | [Demo improvements](workstreams/demo-improvements.md) | Integration agent | Complete; deployed on localhost:8080 | Uploads, configuration/rules, conversation, charts, Docs |
 | [Simplification](workstreams/simplification.md) | Prior integration | Complete | Initial report and deterministic monitoring |
 | [Foundation](workstreams/foundation.md) | Prior handoff | Historical | Storage/recovery basis |
@@ -30,6 +32,8 @@ None. Use Docker context `lima-docker` explicitly on this machine; the shell's d
 ## Validation
 
 Verified on 2026-09-20:
+
+- Confidence: `make types` and `make check` pass with 62 CPU tests. Six PostgreSQL tests include atomic confidence/checkpoint rollback and retry. Four synthetic browser workflows pass, including Low-to-High transition, review/reload, evidence links and legacy/OK rendering; desktop/mobile confidence screenshots inspected. No migration or added model call. See the [confidence workstream](workstreams/confidence.md).
 
 - Landing-page/quickstart follow-up: tagline only in sidebar, sentence line breaks visually checked; one-command `make demo` startup succeeds. Re-ran `make check` and all three synthetic browser workflows successfully; localhost:8080 updated. See the [quickstart](../README.md#quickstart).
 
@@ -44,7 +48,7 @@ Verified on 2026-09-20:
 
 ## Next steps
 
-1. Run `make demo` (on this Mac, `make demo DOCKER='docker --context lima-docker'`), then open localhost:8080 and choose New analysis. Select a demo or upload a supported CSV; setup defaults remain 500 / 100 / 10 seconds.
+1. Preview confidence on synthetic QA at localhost:18080, or rebuild the operator deployment with `make demo DOCKER='docker --context lima-docker'` and open localhost:8080. Existing immutable decisions have no backfilled confidence; newly processed batches receive it. Setup defaults remain 500 / 100 / 10 seconds.
 2. Review Understanding, save any channel exclusions, and optionally propose/review/apply a simple rule. Press Play to lock settings and begin monitoring.
 3. Use Docs for metrics/criteria/evidence explanations and Decision log for continued conversations. Provider outages do not stop deterministic monitoring.
 

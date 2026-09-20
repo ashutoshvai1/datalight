@@ -26,6 +26,14 @@ Initial ranges are observational, not physical limits. Configured bounds are che
 
 ## Replay and recovery
 
+### Suspected-fault confidence
+
+Each new Fault Suspected decision records a typed `confidence` object: low/high level, `evidence-v1` policy version, explanation, evidence IDs and a calculation basis (channel, detector/rule, observed/required persistence, reference count/usability and evaluation row). It describes evidence strength, not calibrated fault probability, severity or diagnosis. OK has null confidence; historical missing fields also read as null and display “Confidence not recorded” for suspected faults. Existing immutable history is never backfilled. The legacy finding-level `measured` field is unchanged.
+
+High requires ten consecutive same-direction abrupt/level threshold exceedances, the drift detector's existing three same-direction checks ten samples apart, or ten consecutive matches of one explicitly applied fault rule. Automatic evidence also requires a usable initial profile and at least 50 valid measurements in that detector's reference. Constant references may qualify if usable; they still require persistence. Overlapping windows are not independent observations. Any qualifying evidence within the batch makes confidence High; unrelated weak signals never add together. Coverage and quality warnings remain separate, and quality-effect rules cannot contribute.
+
+Per-source counters advance only for new observations, continue across batches/restarts, and reset on a non-match, applicable direction reversal, invalid observation or sequence discontinuity. A missing-value rule counts blank cells as matches; malformed records and invalid ordering coordinates cannot establish persistence. Explicit rules retain their independent threshold semantics, including values outside statistical monitoring limits. Missing new counters start at zero on resumed analyses; the existing drift streak remains available. Counters, calculation facts, immutable evidence and checkpoints commit together in existing JSON storage. No schema migration or new model call is required. Questions receive the recorded confidence as typed aggregate context, never original names or raw rows, and cannot revise it.
+
 The initial report commits in a paused state unless the source is exhausted. Play atomically locks the saved monitoring settings and schedules the first monitoring batch immediately; subsequent batches are scheduled after the configured interval. Batches stop at independent sequence resets and may be shorter than requested. The last partial batch is processed normally.
 
 Source replacement checks use size, mtime, inode, and hashes of the first/last 64 KiB. They are not a full-file cryptographic identity check. Files are assumed static during an analysis. Source changes require a new analysis.

@@ -107,6 +107,51 @@ def test_postgres_evidence_rejects_mutation(pg_store):
             session.execute(text("UPDATE evidence SET kind = 'changed'"))
 
 
+def test_postgres_confidence_and_checkpoint_commit_atomically(pg_store, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from datalight.api import create_app
+
+    settings, factory = pg_store
+    client = TestClient(create_app(settings, factory))
+    rid = client.post("/api/v1/runs", json={"interval": 0, "batch_rows": 100}).json()["id"]
+    service.replay(factory, settings, *service.claim(factory, "replay"))
+    client.post(f"/api/v1/runs/{rid}/control", json={"action": "resume"})
+    # Stop just before the synthetic step change.
+    while client.get(f"/api/v1/runs/{rid}").json()["rows_processed"] < 1000:
+        service.replay(factory, settings, *service.claim(factory, "replay"))
+    with factory() as session:
+        run = session.get(m.Run, rid)
+        before = (run.cursor, run.rows_processed, run.detector_state)
+        count = session.scalar(select(func.count()).select_from(m.Finding))
+    job = service.claim(factory, "replay")
+    original_event = service.event
+
+    def fail_commit(session, run_id, kind, details):
+        if kind == "batch.committed":
+            raise RuntimeError("Synthetic interruption before commit")
+        original_event(session, run_id, kind, details)
+
+    monkeypatch.setattr(service, "event", fail_commit)
+    with pytest.raises(RuntimeError, match="Synthetic interruption"):
+        service.replay(factory, settings, *job)
+    with factory() as session:
+        run = session.get(m.Run, rid)
+        assert (run.cursor, run.rows_processed, run.detector_state) == before
+        assert session.scalar(select(func.count()).select_from(m.Finding)) == count
+    monkeypatch.setattr(service, "event", original_event)
+    service.replay(factory, settings, *job)
+    service.replay(factory, settings, *job)
+    with factory() as session:
+        run = session.get(m.Run, rid)
+        assert run.rows_processed == 1100
+        assert session.scalar(select(func.count()).select_from(m.Finding)) == count + 1
+        finding = session.scalar(select(m.Finding).order_by(m.Finding.batch_index.desc()))
+        evidence = session.get(m.Evidence, f"{rid}:b{finding.batch_index}:decision")
+        assert finding.details["confidence"]["level"] == "high"
+        assert finding.details == evidence.details
+
+
 def test_postgres_only_one_question_can_be_pending(pg_store):
     from fastapi.testclient import TestClient
     from pydantic import SecretStr
@@ -134,10 +179,10 @@ def test_postgres_only_one_question_can_be_pending(pg_store):
         assert sorted(pool.map(ask, range(2))) == [201, 409]
     with factory() as session:
         assert session.scalar(select(func.count()).select_from(m.Review)) == 1
-        assert session.scalar(
-            select(func.count()).select_from(m.Job).where(m.Job.kind == "question")
-        ) == 1
-
+        assert (
+            session.scalar(select(func.count()).select_from(m.Job).where(m.Job.kind == "question"))
+            == 1
+        )
 
 
 @pytest.mark.parametrize("operation", ["config", "apply"])

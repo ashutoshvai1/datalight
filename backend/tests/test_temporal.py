@@ -161,10 +161,13 @@ def test_evaluation_metadata_cannot_change_temporal_results(dataset, tmp_path):
         full = read_window(path, 0, 1600, split_sequences=False)
         _, channels = analysis.classify(initial)
         models = temporal.baseline(initial, channels, {})
+        facts = []
         evaluated = temporal.evaluate(
-            full, channels, {}, models, "same-evidence", skip=500, start_row=501
+            full, channels, {}, models, "same-evidence", skip=500, start_row=501,
+            confidence_facts=facts, reference_usable=dict.fromkeys((cid for cid, _ in channels), True),
         )
         results.append(
-            ([t.model_dump() for t in evaluated[0]], {k: v.model_dump() for k, v in models.items()})
+            ([t.model_dump() for t in evaluated[0]], {k: v.model_dump() for k, v in models.items()},
+             [f.model_dump() for f in facts])
         )
     assert results[0] == results[1]

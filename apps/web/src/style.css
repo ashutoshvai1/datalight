@@ -1185,6 +1185,18 @@ footer span {
 .status-panel > .badge {
   margin-top: 15px;
 }
+.decision-confidence {
+  margin: 12px 0;
+}
+.decision-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.decision-confidence p {
+  margin: 8px 0;
+}
 .decision-card details {
   margin: 15px 0;
 }

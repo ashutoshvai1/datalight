@@ -534,6 +534,30 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** ConfidenceBasis */
+        ConfidenceBasis: {
+            /** Channel Id */
+            channel_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "abrupt" | "level" | "drift" | "rule";
+            /** Rule Id */
+            rule_id?: string | null;
+            /** Observed Persistence */
+            observed_persistence: number;
+            /** Required Persistence */
+            required_persistence: number;
+            /** Reference Count */
+            reference_count?: number | null;
+            /** Reference Usable */
+            reference_usable?: boolean | null;
+            /** Evaluated At */
+            evaluated_at: number;
+            /** Evidence Ids */
+            evidence_ids: string[];
+        };
         /** Correlation */
         Correlation: {
             /** Left */
@@ -584,6 +608,26 @@ export interface components {
             row_start: number;
             /** Row End */
             row_end: number;
+            confidence?: components["schemas"]["DecisionConfidence"] | null;
+        };
+        /** DecisionConfidence */
+        DecisionConfidence: {
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "low" | "high";
+            /**
+             * Policy Version
+             * @default evidence-v1
+             * @constant
+             */
+            policy_version: "evidence-v1";
+            /** Explanation */
+            explanation: string;
+            /** Evidence Ids */
+            evidence_ids: string[];
+            basis: components["schemas"]["ConfidenceBasis"];
         };
         /** DecisionView */
         DecisionView: {

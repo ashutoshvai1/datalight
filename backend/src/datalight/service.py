@@ -5,11 +5,20 @@ from uuid import uuid4
 
 from sqlalchemy import and_, or_, select, text
 
-from . import analysis, providers, rules, sources, temporal
+from . import analysis, confidence, providers, rules, sources, temporal
 from . import models as m
 from .db import now
 from .ingestion import SourceError, fingerprint, identity, read_window
-from .schemas import ChannelExplanation, Check, Coverage, Decision, ReportView, RunConfig, Trigger
+from .schemas import (
+    ChannelExplanation,
+    Check,
+    ConfidenceBasis,
+    Coverage,
+    Decision,
+    ReportView,
+    RunConfig,
+    Trigger,
+)
 
 
 def event(session, run_id, kind, payload):
@@ -199,6 +208,7 @@ def replay(factory, settings, job_id, token):
                 raise SourceError(
                     "This historical analysis uses an older detector. Start a new analysis to monitor."
                 )
+        confidence_facts: list[ConfidenceBasis] = []
         triggers, extra, counters, metrics, assessed = temporal.evaluate(
             combined,
             channels,
@@ -209,6 +219,8 @@ def replay(factory, settings, job_id, token):
             skip,
             state.get("channels"),
             initial,
+            confidence_facts=confidence_facts,
+            reference_usable={p["id"]: p["usable"] for p in run.report["profiles"]} if not initial else {},
         )
         checks += extra
         for p in current:
@@ -232,6 +244,7 @@ def replay(factory, settings, job_id, token):
                         "reference": models[p.id].model_dump(),
                         "current": metrics[p.id],
                         "triggers": [t.model_dump() for t in triggers if t.channel_id == p.id],
+                        "confidence_basis": [f.model_dump() for f in confidence_facts if f.channel_id == p.id],
                         "reference_evidence_id": f"{run.id}:b0:temporal:{p.id}",
                     },
                 )
@@ -257,10 +270,14 @@ def replay(factory, settings, job_id, token):
                 )
             )
         quality_warnings = [f"{c.name}: {c.explanation}" for c in checks if c.status == "fail"]
+        rule_state = dict(state.get("rules", {}))
         rule_matches = (
             []
             if initial
-            else rules.evaluate(window, channels, config.rules, prefix, run.rows_processed + 1)
+            else rules.evaluate(
+                combined, channels, config.rules, prefix, run.rows_processed + 1,
+                skip=skip, state=rule_state, confidence_facts=confidence_facts,
+            )
         )
         rule_lookup = {rule.id: rule for rule in config.rules}
         for match in rule_matches:
@@ -273,6 +290,7 @@ def replay(factory, settings, job_id, token):
                     details={
                         "rule": rule_lookup[match.rule_id].model_dump(),
                         "match": match.model_dump(),
+                        "confidence_basis": [f.model_dump() for f in confidence_facts if f.rule_id == match.rule_id],
                     },
                 )
             )
@@ -355,6 +373,7 @@ def replay(factory, settings, job_id, token):
                 forecast_errors=metrics,
                 row_start=run.rows_processed + 1,
                 row_end=run.rows_processed + len(window.rows),
+                confidence=confidence.assess(confidence_facts),
             )
             decision_evidence = f"{prefix}:decision"
             session.add(
@@ -387,6 +406,7 @@ def replay(factory, settings, job_id, token):
         start = max(0, len(combined.rows) - temporal.HISTORY)
         run.detector_state = {
             "channels": counters,
+            "rules": rule_state,
             "history": {
                 "cursor": combined.offsets[start],
                 "count": len(combined.rows) - start,
@@ -534,11 +554,15 @@ def interpret(factory, settings, job_id, token, transport=None):
                     )
                 )
             summary.decision = providers.DerivedDecision(
+                confidence=decision.confidence,
                 evidence_id=decision_evidence,
                 status=decision.status,
                 assessed=decision.coverage.assessed,
                 total=decision.coverage.total,
-                evidence_ids=list(dict.fromkeys([decision_evidence, *finding.evidence_ids])),
+                evidence_ids=list(dict.fromkeys([
+                    decision_evidence, *finding.evidence_ids,
+                    *(decision.confidence.evidence_ids if decision.confidence else []),
+                ])),
                 forecast_errors={
                     cid: metric for cid, metric in decision.forecast_errors.items()
                     if cid not in excluded

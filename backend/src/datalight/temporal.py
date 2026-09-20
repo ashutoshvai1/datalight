@@ -5,8 +5,16 @@ import math
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
+from . import confidence
 from .ingestion import Window, finite
-from .schemas import ChannelLimit, Check, PredictionMetrics, ReferenceMetric, Trigger
+from .schemas import (
+    ChannelLimit,
+    Check,
+    ConfidenceBasis,
+    PredictionMetrics,
+    ReferenceMetric,
+    Trigger,
+)
 
 HISTORY = 69
 
@@ -132,7 +140,17 @@ def baseline(window, channels, limits):
 
 
 def evaluate(
-    window, channels, limits, models, prefix, start_row=1, skip=0, state=None, initial=False
+    window,
+    channels,
+    limits,
+    models,
+    prefix,
+    start_row=1,
+    skip=0,
+    state=None,
+    initial=False,
+    confidence_facts=None,
+    reference_usable=None,
 ):
     """Process new observations only; preceding context is reread from the CSV.
 
@@ -160,6 +178,7 @@ def evaluate(
             "forecast_errors": len(errors),
         }
         previous = state.get(cid, {})
+        persistence = {k: dict(v) for k, v in previous.get("confidence", {}).items()}
         hold = previous.get("hold", 0)
         streak = previous.get("streak", 0)
         direction = previous.get("direction", 0)
@@ -171,10 +190,12 @@ def evaluate(
             continuous = i > 0 and segments[i] == segments[i - 1]
             if not continuous:
                 hold, streak, direction, position = 0, 0, 0, 0
+                persistence = {}
             position += 1
             value = values[i]
             if not np.isfinite(value):
                 hold, streak, direction = 0, 0, 0
+                persistence = {}
                 continue
             hold = hold + 1 if continuous and value == values[i - 1] else 1
             max_hold = max(max_hold, hold)
@@ -184,6 +205,7 @@ def evaluate(
                 ref = getattr(model, kind)
                 measured = f[kind][i]
                 if ref is None or not np.isfinite(measured):
+                    persistence.pop(kind, None)
                     if kind == "drift":
                         streak, direction = 0, 0
                     continue
@@ -201,8 +223,37 @@ def evaluate(
                     direction = sign
                     if streak < 3:
                         continue
-                elif abs(score) <= 6:
-                    continue
+                else:
+                    sign = 1 if score > 6 else -1 if score < -6 else 0
+                    prior_count = persistence.get(kind, {})
+                    count = (
+                        prior_count.get("count", 0) + 1
+                        if sign and sign == prior_count.get("direction")
+                        else int(bool(sign))
+                    )
+                    persistence[kind] = {"count": count, "direction": sign}
+                    if not sign:
+                        continue
+                if confidence_facts is not None:
+                    confidence.retain(
+                        confidence_facts,
+                        ConfidenceBasis(
+                            channel_id=cid,
+                            kind=kind,
+                            observed_persistence=streak
+                            if kind == "drift"
+                            else persistence[kind]["count"],
+                            required_persistence=3 if kind == "drift" else confidence.PERSISTENCE,
+                            reference_count=ref.count,
+                            reference_usable=(reference_usable or {}).get(cid, False),
+                            evaluated_at=row,
+                            evidence_ids=[
+                                f"{prefix}:temporal:{cid}",
+                                f"{prefix.rsplit(':b', 1)[0]}:b0:temporal:{cid}",
+                                f"{prefix.rsplit(':b', 1)[0]}:b0:profile:{cid}",
+                            ],
+                        ),
+                    )
                 triggers.append(
                     Trigger(
                         channel_id=cid,
@@ -226,6 +277,7 @@ def evaluate(
             direction=direction,
             first_drift=first_drift,
             position=position,
+            confidence=persistence,
         )
         checks.append(
             Check(

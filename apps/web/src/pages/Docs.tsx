@@ -245,6 +245,34 @@ export default function Docs() {
             </tbody>
           </table>
         </div>
+        <h3>Low and high confidence</h3>
+        <p>
+          Each new Fault Suspected decision includes evidence strength: Low or
+          High. This is a deterministic heuristic (evidence-v1), not a
+          calibrated probability, severity rating, or diagnosis. Low means a
+          rule fired but the evidence did not meet the High criteria. OK
+          decisions have no confidence label; older decisions may say
+          “Confidence not recorded”.
+        </p>
+        <p>
+          High requires an abrupt or level detector to exceed its threshold in
+          the same direction for 10 consecutive evaluations, or drift to meet
+          its existing three consecutive checks, spaced 10 samples apart.
+          Automatic detectors also need a usable initial channel profile and at
+          least 50 valid measurements in that detector’s reference. An
+          explicitly applied fault rule needs 10 consecutive matching
+          observations; a missing-value rule counts consecutive blank cells.
+        </p>
+        <p>
+          Any qualifying evidence within a batch makes its decision High. Weak
+          signals are not added together. Counters continue across batches and
+          restarts, but reset on non-matches, invalid observations, direction
+          changes where relevant, and sequence discontinuities. Quality-only
+          rules do not contribute confidence; limited coverage on other channels
+          remains a separate warning. Overlapping windows are not independent
+          observations, and the initial reference remains provisional even when
+          confidence is High. Reviews never rewrite it.
+        </p>
         <h3>Adding a simple rule</h3>
         <p>
           Before first Play, describe one channel and a condition, such as “flag

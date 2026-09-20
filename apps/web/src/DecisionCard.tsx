@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Confidence, { ConfidenceLabel } from "./Confidence";
 import {
   useInfiniteQuery,
   useMutation,
@@ -88,9 +89,13 @@ export default function DecisionCard({
         <h3>
           Samples {d.row_start}–{d.row_end}
         </h3>
-        <Badge tone={d.status === "OK" ? "green" : "amber"}>{d.status}</Badge>
+        <div className="decision-status">
+          <Badge tone={d.status === "OK" ? "green" : "amber"}>{d.status}</Badge>
+          <ConfidenceLabel decision={d} />
+        </div>
       </div>
       <p className="explanation">{d.explanation}</p>
+      <Confidence decision={d} showEvidence={showEvidence} />
       {item.human_assessment && (
         <p className="human-assessment">
           <strong>Human assessment: {item.effective_status}</strong> ·{" "}

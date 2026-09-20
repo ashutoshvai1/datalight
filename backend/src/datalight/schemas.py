@@ -197,6 +197,26 @@ class ForecastError(Contract):
     forecast_errors: int
 
 
+class ConfidenceBasis(Contract):
+    channel_id: str
+    kind: Literal["abrupt", "level", "drift", "rule"]
+    rule_id: str | None = None
+    observed_persistence: int = Field(ge=0)
+    required_persistence: int = Field(ge=1)
+    reference_count: int | None = None
+    reference_usable: bool | None = None
+    evaluated_at: int
+    evidence_ids: list[str]
+
+
+class DecisionConfidence(Contract):
+    level: Literal["low", "high"]
+    policy_version: Literal["evidence-v1"] = "evidence-v1"
+    explanation: str
+    evidence_ids: list[str]
+    basis: ConfidenceBasis
+
+
 class Decision(Contract):
     status: Literal["OK", "Fault Suspected"]
     explanation: str
@@ -207,6 +227,7 @@ class Decision(Contract):
     forecast_errors: dict[str, ForecastError] = Field(default_factory=dict)
     row_start: int
     row_end: int
+    confidence: DecisionConfidence | None = None
 
 
 class Correlation(Contract):

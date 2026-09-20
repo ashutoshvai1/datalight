@@ -6,6 +6,7 @@ import type { components } from "../generated/api";
 import { Badge, Empty, ErrorNotice } from "../components";
 import { Chart } from "../Chart";
 import DecisionCard, { type BatchDecision } from "../DecisionCard";
+import Confidence, { ConfidenceLabel } from "../Confidence";
 
 type TraceWindow = components["schemas"]["TraceView"];
 
@@ -149,11 +150,17 @@ export default function Monitoring({ run, report, showEvidence }: PageProps) {
       <ErrorNotice error={control.error || trace.error || decisions.error} />
       <section className="panel status-panel">
         <span className="eyebrow">LATEST AUTOMATED DECISION</span>
-        <h2
-          className={`process-status ${latest?.decision.status === "Fault Suspected" ? "warning-text" : ""}`}
-        >
-          {latest?.decision.status ?? "Waiting for first batch"}
-        </h2>
+        <div className="decision-status">
+          <h2
+            className={`process-status ${latest?.decision.status === "Fault Suspected" ? "warning-text" : ""}`}
+          >
+            {latest?.decision.status ?? "Waiting for first batch"}
+          </h2>
+          {latest && <ConfidenceLabel decision={latest.decision} />}
+        </div>
+        {latest && (
+          <Confidence decision={latest.decision} showEvidence={showEvidence} />
+        )}
         <p>
           {latest
             ? latest.decision.explanation

@@ -2,10 +2,19 @@
 
 from sqlalchemy import select
 
+from . import confidence, temporal
 from . import models as m
 from .db import now
 from .ingestion import finite
-from .schemas import Contract, MonitoringRule, RuleInterval, RuleMatch, RuleProposalView, RunConfig
+from .schemas import (
+    ConfidenceBasis,
+    Contract,
+    MonitoringRule,
+    RuleInterval,
+    RuleMatch,
+    RuleProposalView,
+    RunConfig,
+)
 
 
 class RuleProposalPayload(Contract):
@@ -55,16 +64,24 @@ def eligible(run, config):
     return {p["id"] for p in run.report["profiles"]} - set(config.excluded_channel_ids)
 
 
-def evaluate(window, channels, configured, prefix, start_row):
+def evaluate(
+    window, channels, configured, prefix, start_row, *, skip=0, state=None, confidence_facts=None
+):
     names = dict(channels)
     matches = []
     for rule in configured:
         if rule.channel_id not in names:
             continue
         index = window.header.index(names[rule.channel_id])
+        _, segments, _ = temporal.vectors(window, names[rule.channel_id])
+        count = (state or {}).get(rule.id, 0)
         violated = []
-        for i, row in enumerate(window.rows):
+        for i in range(skip, len(window.rows)):
+            row = window.rows[i]
+            if i == 0 or segments[i] != segments[i - 1]:
+                count = 0
             if window.invalid_records and window.invalid_records[i]:
+                count = 0
                 continue
             raw = row[index]
             value = finite(raw)
@@ -81,7 +98,29 @@ def evaluate(window, channels, configured, prefix, start_row):
                 elif rule.operator == "outside":
                     hit = value < rule.minimum or value > rule.maximum
             if hit:
-                violated.append(start_row + i)
+                violated.append(start_row + i - skip)
+            coordinate = (
+                finite(row[window.sample_index]) if window.sample_index is not None else None
+            )
+            valid_coordinate = window.sample_index is None or (
+                coordinate is not None and coordinate >= 1 and coordinate.is_integer()
+            )
+            count = count + 1 if hit and valid_coordinate else 0
+            if hit and rule.effect == "fault" and confidence_facts is not None:
+                confidence.retain(
+                    confidence_facts,
+                    ConfidenceBasis(
+                        channel_id=rule.channel_id,
+                        kind="rule",
+                        rule_id=rule.id,
+                        observed_persistence=count,
+                        required_persistence=confidence.PERSISTENCE,
+                        evaluated_at=start_row + i - skip,
+                        evidence_ids=[f"{prefix}:rule:{rule.id}"],
+                    ),
+                )
+        if state is not None:
+            state[rule.id] = count
         if violated:
             intervals: list[RuleInterval] = []
             for row in violated:

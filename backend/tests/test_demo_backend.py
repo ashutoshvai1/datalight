@@ -67,6 +67,12 @@ def test_upload_generic_row_order_exclusion_lock_and_history(store, tmp_path):
     decisions = client.get(f"/api/v1/runs/{rid}/decisions").json()
     assert decisions[0]["decision"]["coverage"]["total"] == 1
     assert set(decisions[0]["decision"]["forecast_errors"]) == {"c001"}
+    assert all(
+        not d["decision"]["confidence"] or d["decision"]["confidence"]["basis"]["channel_id"] == "c001"
+        for d in decisions
+    )
+    with factory() as session:
+        assert set(session.get(m.Run, rid).detector_state["channels"]) == {"c001"}
     assert client.get(f"/api/v1/runs/{rid}/report").json()["predictions"] == original
     assert (
         client.post(endpoint, json={"excluded_channel_ids": [], "rule_ids": []}).status_code == 409
@@ -200,6 +206,9 @@ def test_proposal_review_apply_privacy_and_rule_evidence(store, tmp_path):
         supplied = summary["decision"]["rule_evidence"][0]
         assert supplied["rule"]["threshold"] == 70
         assert supplied["violation_count"] == 9
+        assert summary["decision"]["confidence"] == decision["confidence"]
+        assert summary["decision"]["confidence"]["level"] == "low"
+        assert summary["decision"]["confidence"]["basis"]["observed_persistence"] == 9
         assert "row_start" not in supplied and "pressure" not in json.dumps(wire)
         answer = {
             "text": "The explicit fault rule exceeded 70 in nine observations.",
