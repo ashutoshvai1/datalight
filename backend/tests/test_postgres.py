@@ -137,3 +137,85 @@ def test_postgres_only_one_question_can_be_pending(pg_store):
         assert session.scalar(
             select(func.count()).select_from(m.Job).where(m.Job.kind == "question")
         ) == 1
+
+
+
+@pytest.mark.parametrize("operation", ["config", "apply"])
+def test_postgres_first_play_serializes_monitoring_changes(pg_store, operation):
+    from threading import Barrier
+
+    from fastapi.testclient import TestClient
+
+    from datalight.api import create_app
+    from datalight.schemas import MonitoringRule, RuleProposalView
+
+    settings, factory = pg_store
+    app = create_app(settings, factory)
+    client = TestClient(app)
+    created = client.post("/api/v1/runs", json={"interval": 0})
+    assert created.status_code == 201
+    rid = created.json()["id"]
+    service.replay(factory, settings, *service.claim(factory, "replay"))
+    proposal_id = str(uuid4())
+    proposal = RuleProposalView(
+        id=proposal_id,
+        status="succeeded",
+        rule=MonitoringRule(id=proposal_id, channel_id="c001", operator="gt", threshold=1),
+    )
+    with factory.begin() as session:
+        session.add(
+            m.Job(
+                run_id=rid,
+                kind="rule_proposal",
+                task_key=proposal_id,
+                status="done",
+                payload={"result": proposal.model_dump()},
+            )
+        )
+    barrier = Barrier(2)
+    change_path = (
+        f"/api/v1/runs/{rid}/monitoring-config"
+        if operation == "config"
+        else f"/api/v1/runs/{rid}/rule-proposals/{proposal_id}/apply"
+    )
+    change_body = {"excluded_channel_ids": ["c002"], "rule_ids": []}
+
+    def request(play):
+        with TestClient(app) as participant:
+            barrier.wait(timeout=10)
+            if play:
+                return participant.post(f"/api/v1/runs/{rid}/control", json={"action": "resume"})
+            return participant.post(
+                change_path, json=change_body if operation == "config" else None
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        played, changed = list(pool.map(request, (True, False)))
+    assert played.status_code == 200, played.text
+    assert changed.status_code in (200, 409), changed.text
+    config = client.get(f"/api/v1/runs/{rid}").json()["config"]
+    assert config["monitoring_locked"] is True
+    if operation == "config":
+        assert config["excluded_channel_ids"] == (["c002"] if changed.status_code == 200 else [])
+    else:
+        assert [rule["id"] for rule in config["rules"]] == (
+            [proposal_id] if changed.status_code == 200 else []
+        )
+    with factory() as session:
+        events = session.scalars(
+            select(m.AuditEvent).where(m.AuditEvent.run_id == rid).order_by(m.AuditEvent.id)
+        ).all()
+        lock = next(
+            event
+            for event in events
+            if event.kind == "run.control" and event.payload["action"] == "resume"
+        )
+        assert not any(
+            event.id > lock.id and event.kind in ("monitoring.configured", "rule.applied")
+            for event in events
+        )
+    assert (
+        client.post(change_path, json=change_body if operation == "config" else None).status_code
+        == 409
+    )
+    assert client.get(f"/api/v1/runs/{rid}").json()["config"] == config
