@@ -10,6 +10,8 @@ The approved demo improvements add local browser uploads, pre-Play channel selec
 
 Validation and current limitations are recorded in [current state](../devlog/current.md). The prior foundation remains the storage and recovery basis; the approved simplification supersedes its automatic startup, one-second pacing, partial role hypotheses and per-channel finding UI.
 
+The [synthetic web-service demonstration](SECOND_DOMAIN_DEMO.md) adds a reproducible second-domain pass through the existing upload, reference learning, drift detection, reviewed-rule and evidence-citing question paths. Header-renaming checks and an architectural explanation demonstrate portability; causal diagnosis and general accuracy remain unproven.
+
 ## Suggestions awaiting approval
 
 - Optional automatic pause at the first suspected fault.
@@ -22,7 +24,7 @@ Neither suggestion is implemented.
 - Richer compound/temporal operating rules, unit validation and wall-clock timeliness.
 - Validated physical fault diagnosis and causal explanations.
 - Lagged relationships, multivariate detectors and domain-specific evaluation.
-- Additional source adapters and a second-domain demonstration. Mounted sources retain the sample-reset convention; uploaded CSVs use file row order. Recognized evaluation metadata remains excluded.
+- Additional source adapters. Mounted sources retain the sample-reset convention; uploaded CSVs use file row order. Recognized evaluation metadata remains excluded.
 - Full-file replay/storage measurement, retention policy, and a second live provider.
 - Remote streaming, authentication and multi-tenancy.
 - Baseline or threshold adaptation from human review. Overrides currently change only the recorded human assessment.

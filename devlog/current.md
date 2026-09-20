@@ -6,6 +6,8 @@ The approved suspected-fault confidence feature is implemented: deterministic Lo
 
 The product remains generic. [DATASET.md](../docs/DATASET.md) is offline testbed context. Earlier foundation verification is preserved in [the historical handoff](foundation-verification.md).
 
+The [second-domain web-service demo](../docs/SECOND_DOMAIN_DEMO.md) is implemented and verified through existing upload/replay APIs, with a reproducible synthetic CSV and an architectural portability explanation. Production analysis logic is unchanged.
+
 ## Constraints
 
 - Raw CSV observations stay local. Model calls contain typed aggregates, sanitized questions/conversation or sanitized rule requests with opaque channel IDs.
@@ -20,6 +22,7 @@ The product remains generic. [DATASET.md](../docs/DATASET.md) is offline testbed
 
 | Workstream | Owner | Status | Integration surface |
 |---|---|---|---|
+| [Second-domain demo](workstreams/second-domain.md) | Integration agent | Complete; synthetic QA and live provider verified | Synthetic generator/CSV, upload acceptance tests, walkthrough |
 | [Fault confidence](workstreams/confidence.md) | Integration agent | Complete; synthetic QA verified | Persistence counters, decision JSON, provider aggregates, UI and Docs |
 | [Demo improvements](workstreams/demo-improvements.md) | Integration agent | Complete; deployed on localhost:8080 | Uploads, configuration/rules, conversation, charts, Docs |
 | [Simplification](workstreams/simplification.md) | Prior integration | Complete | Initial report and deterministic monitoring |
@@ -32,6 +35,8 @@ None. Use Docker context `lima-docker` explicitly on this machine; the shell's d
 ## Validation
 
 Verified on 2026-09-20:
+
+- Second domain: `make check` passes with 65 CPU tests; all five synthetic browser workflows pass and new screenshots were inspected. Header renaming preserves detections, normal batches and traffic stay unflagged, and the latency rule matches all 532 expected observations. Two live Norrin calls verify the rule proposal and a five-citation answer with an explicit causal limitation. See the [second-domain workstream](workstreams/second-domain.md).
 
 - Confidence: `make types` and `make check` pass with 62 CPU tests. Six PostgreSQL tests include atomic confidence/checkpoint rollback and retry. Four synthetic browser workflows pass, including Low-to-High transition, review/reload, evidence links and legacy/OK rendering; desktop/mobile confidence screenshots inspected. No migration or added model call. See the [confidence workstream](workstreams/confidence.md).
 
@@ -48,7 +53,7 @@ Verified on 2026-09-20:
 
 ## Next steps
 
-1. Preview confidence on synthetic QA at localhost:18080, or rebuild the operator deployment with `make demo DOCKER='docker --context lima-docker'` and open localhost:8080. Existing immutable decisions have no backfilled confidence; newly processed batches receive it. Setup defaults remain 500 / 100 / 10 seconds.
+1. For the second-domain presentation, upload `tests/fixtures/demo_web_service.csv` using the [walkthrough](../docs/SECOND_DOMAIN_DEMO.md); select 500 / 100 / 1 second. Otherwise preview confidence on synthetic QA at localhost:18080, or rebuild the operator deployment with `make demo DOCKER='docker --context lima-docker'`. Existing immutable decisions have no backfilled confidence. Default setup remains 500 / 100 / 10 seconds.
 2. Review Understanding, save any channel exclusions, and optionally propose/review/apply a simple rule. Press Play to lock settings and begin monitoring.
 3. Use Docs for metrics/criteria/evidence explanations and Decision log for continued conversations. Provider outages do not stop deterministic monitoring.
 

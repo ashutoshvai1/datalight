@@ -41,6 +41,10 @@ The extractor streams the original export, evaluates test run 1 of all 20 faulty
 
 Generated files are `runtime/demos/demo_abrupt.csv`, `demo_drift.csv`, and `demo_multichannel.csv`. Selection scores and source provenance remain in ignored `runtime/demo-selection.json`. Files, real-derived metrics, and credentials are excluded from Git and Docker images. Only synthetic data is used for committed fixtures and browser screenshots. Selection metadata never guides live monitoring.
 
+## Try a second domain
+
+Upload the included [synthetic web-service CSV](tests/fixtures/demo_web_service.csv) through **New analysis → Upload CSV**. Use 500 initial samples, 100 per batch and a 1-second interval. Traffic stays stable while CPU, latency and errors rise; the same detector learns references and finds changes without domain-specific code. The [walkthrough](docs/SECOND_DOMAIN_DEMO.md) covers optional reviewed rules, evidence-citing questions, architectural portability and the limits of causal interpretation. No download or model key is needed for deterministic monitoring.
+
 ## Understanding and monitoring
 
 - **Quality:** completeness and invalid counts, user-configured bounds, and possible frozen behavior. Unspecified bounds are “Not configured.” Stuck warnings require a hold of at least 20 samples or five times the initial typical completed hold, whichever is larger. A constant initial channel is explicitly inconclusive.

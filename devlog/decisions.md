@@ -63,3 +63,7 @@ The 2026-09-20 follow-up keeps the product tagline only in the sidebar, with one
 ## D015 — Deterministic suspected-fault confidence
 
 The approved evidence-v1 policy assigns Low/High evidence strength per automated fault decision, independently of fault status, severity and model availability. High requires persistent evidence and, for built-in detectors, a usable initial profile with 50 reference measurements. See [architecture](../docs/architecture.md) for exact criteria and compatibility. Counters cross batch boundaries and commit with the checkpoint; reviews preserve the recorded confidence. No probability calibration, threshold adaptation or history backfill is implied.
+
+## D016 — Synthetic second-domain portability demonstration
+
+The approved [web-service demo](../docs/SECOND_DOMAIN_DEMO.md) uses a committed synthetic CSV and the existing upload flow. Its generator and scenario remain offline; production algorithms, prompts and schemas are unchanged. Baseline-only replay and renamed-header equivalence demonstrate detector portability independently of explicit operator rules. Evidence-backed discussion supports root-cause investigation without claiming causal identification or general detection accuracy.
