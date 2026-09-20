@@ -6,6 +6,22 @@ Datalight is a local CSV data-understanding and monitoring application for the [
 
 The [Tennessee Eastman export](docs/DATASET.md) is the primary testbed. Its labels, channel identities, ranges and fault catalogue are offline context, never detector inputs or model knowledge. The product's source-convention portability limits remain explicit in the [roadmap](docs/roadmap.md).
 
+## A look inside
+
+Actual app screenshots using the included [synthetic web-service demo](docs/SECOND_DOMAIN_DEMO.md), with optional AI enabled. Click any image for a closer look.
+
+**Watch a change unfold.** Replay observations, compare measurements with short-term forecasts, and inspect flagged intervals. Here, latency drifts upward; the latest decision explains its evidence strength while the chart shows an earlier window.
+
+[![Datalight monitoring: rising latency, forecast overlay, shaded change intervals, and a suspected-fault decision with evidence links.](docs/screenshots/monitoring.png)](docs/screenshots/monitoring.png)
+
+**Understand before you monitor.** Explore channel statistics, quality checks, forecast error, relationships, and an AI explanation linked to the underlying evidence.
+
+[![Datalight understanding report: four web-service channels and a detailed latency profile with quality checks and a cited AI explanation.](docs/screenshots/understanding.png)](docs/screenshots/understanding.png)
+
+**Ask why. Keep the evidence.** Discuss a flagged batch with the AI assistant, follow its citations, and accept, question, or override the decision. The original finding remains in the history.
+
+[![Datalight decision review: a question about a flagged batch, the AI response with eight evidence citations, and human review controls.](docs/screenshots/evidence-review.png)](docs/screenshots/evidence-review.png)
+
 ## Quickstart
 
 You need Docker running with Compose, `make`, and about 4 GB of available memory. No Python, Node, data download, or model key is needed for the included synthetic demo. To also try AI explanations, questions and rule proposals, follow the [optional model setup](docs/demo-setup.md#enable-model-explanations-questions-and-rules) before starting.
