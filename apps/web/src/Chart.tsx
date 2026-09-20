@@ -32,16 +32,21 @@ export function Chart({
   height?: number;
 }) {
   const element = useRef<HTMLDivElement>(null);
+  const instance = useRef<echarts.ECharts | null>(null);
   useEffect(() => {
     if (!element.current) return;
     const chart = echarts.init(element.current);
-    chart.setOption(option);
+    instance.current = chart;
     const observer = new ResizeObserver(() => chart.resize());
     observer.observe(element.current);
     return () => {
       observer.disconnect();
       chart.dispose();
+      instance.current = null;
     };
+  }, []);
+  useEffect(() => {
+    instance.current?.setOption(option, { notMerge: true });
   }, [option]);
   return (
     <div

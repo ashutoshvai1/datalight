@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "./generated/api";
 import { api, number, type Review } from "./api";
-import { Badge, ErrorNotice } from "./components";
+import { Badge, ErrorNotice, EvidenceLinks } from "./components";
 export type BatchDecision = components["schemas"]["DecisionView"];
 type Answer = components["schemas"]["AnswerView"];
 
@@ -19,10 +19,8 @@ export default function DecisionCard({
   const [action, setAction] = useState<
     "accept" | "question" | "override" | null
   >(null);
-  const [operator, setOperator] = useState(
-    () => localStorage.getItem("datalight-operator") ?? "",
-  );
   const [reason, setReason] = useState("");
+  const [question, setQuestion] = useState("");
   const [replacement, setReplacement] = useState("OK");
   const [open, setOpen] = useState(false);
   const reviews = useQuery({
@@ -38,17 +36,21 @@ export default function DecisionCard({
     refetchInterval: open ? 3000 : false,
   });
   const save = useMutation({
-    mutationFn: () =>
+    mutationFn: (reviewAction: "accept" | "question" | "override") =>
       api(`/findings/${item.id}/reviews`, {
-        action,
-        operator,
-        reason,
-        replacement: action === "override" ? replacement : null,
+        action: reviewAction,
+        reason:
+          reviewAction === "question"
+            ? question
+            : reviewAction === "override"
+              ? reason
+              : "",
+        replacement: reviewAction === "override" ? replacement : null,
       }),
-    onSuccess: () => {
-      localStorage.setItem("datalight-operator", operator);
+    onSuccess: (_, reviewAction) => {
       setAction(null);
-      setReason("");
+      if (reviewAction === "question") setQuestion("");
+      else setReason("");
       setOpen(true);
       void client.invalidateQueries({ queryKey: ["reviews", item.id] });
       void client.invalidateQueries({ queryKey: ["answers", item.id] });
@@ -56,6 +58,29 @@ export default function DecisionCard({
     },
   });
   const d = item.decision;
+  const pendingQuestion =
+    reviews.data?.some(
+      (review) =>
+        review.action === "question" &&
+        !answers.data?.some((answer) => answer.review_id === review.id),
+    ) ||
+    answers.data?.some((answer) =>
+      ["pending", "queued", "running"].includes(answer.status),
+    );
+  const ruleMatches =
+    (
+      d as typeof d & {
+        rule_matches?: {
+          rule_id: string;
+          channel_id: string;
+          effect: string;
+          violation_count: number;
+          row_start: number;
+          row_end: number;
+          evidence_ids: string[];
+        }[];
+      }
+    ).rule_matches ?? [];
   const display = (text: string) =>
     text.replace(/\bc\d{3}\b/g, (id) => names[id] ?? id);
   return (
@@ -165,15 +190,36 @@ export default function DecisionCard({
           </>
         )}
       </details>
+      {ruleMatches.length > 0 && (
+        <details open>
+          <summary>Custom monitoring rules ({ruleMatches.length})</summary>
+          {ruleMatches.map((match, index) => (
+            <div className="quality-row" key={`${match.rule_id}:${index}`}>
+              <strong>{names[match.channel_id] ?? match.channel_id}</strong>
+              <Badge tone="amber">
+                {match.effect === "fault"
+                  ? "Fault Suspected"
+                  : "Quality warning"}
+              </Badge>
+              <p>
+                {match.violation_count} matching observations · samples{" "}
+                {match.row_start}–{match.row_end}
+              </p>
+              <EvidenceLinks
+                ids={match.evidence_ids}
+                showEvidence={showEvidence}
+              />
+            </div>
+          ))}
+        </details>
+      )}
       <div className="review-actions">
         {(["accept", "question", "override"] as const).map((a) => (
           <button
             key={a}
             onClick={() => {
-              setOperator(
-                localStorage.getItem("datalight-operator") ?? operator,
-              );
               setAction(a);
+              if (a === "question") setOpen(true);
               setReplacement(d.status === "OK" ? "Fault Suspected" : "OK");
             }}
           >
@@ -181,26 +227,17 @@ export default function DecisionCard({
           </button>
         ))}
       </div>
-      {action && (
+      {action && action !== "question" && (
         <form
           className="review-form"
           onSubmit={(e) => {
             e.preventDefault();
-            save.mutate();
+            save.mutate(action);
           }}
         >
-          <label>
-            Your name
-            <input
-              required
-              maxLength={100}
-              value={operator}
-              onChange={(e) => setOperator(e.target.value)}
-            />
-          </label>
           {action !== "accept" && (
             <label>
-              {action === "question" ? "Your question" : "Override reason"}
+              Override reason
               <textarea
                 required
                 maxLength={4000}
@@ -208,12 +245,6 @@ export default function DecisionCard({
                 onChange={(e) => setReason(e.target.value)}
               />
             </label>
-          )}
-          {action === "question" && (
-            <p>
-              Your question and computed summaries go to the configured LLM. Do
-              not paste raw data or secrets.
-            </p>
           )}
           {action === "override" && (
             <label>
@@ -230,11 +261,7 @@ export default function DecisionCard({
           )}
           <div className="review-actions">
             <button className="primary" disabled={save.isPending}>
-              {save.isPending
-                ? "Saving…"
-                : action === "question"
-                  ? "Ask question"
-                  : "Save review"}
+              {save.isPending ? "Saving…" : "Save review"}
             </button>
             <button type="button" onClick={() => setAction(null)}>
               Cancel
@@ -252,7 +279,11 @@ export default function DecisionCard({
             return (
               <div className="review-history" key={r.id}>
                 <strong>
-                  {r.operator} · {r.action}
+                  {r.action === "question"
+                    ? "You asked"
+                    : r.action === "accept"
+                      ? "Accepted"
+                      : "Overridden"}
                 </strong>
                 <time>{new Date(r.created_at).toLocaleString()}</time>
                 {r.replacement && <p>Human assessment: {r.replacement}</p>}
@@ -263,15 +294,10 @@ export default function DecisionCard({
                     <p>
                       {answer ? display(answer.text) : "Waiting for an answer…"}
                     </p>
-                    {answer?.evidence_ids.map((id) => (
-                      <button
-                        className="text-button"
-                        key={id}
-                        onClick={() => showEvidence(id)}
-                      >
-                        Evidence
-                      </button>
-                    ))}
+                    <EvidenceLinks
+                      ids={answer?.evidence_ids ?? []}
+                      showEvidence={showEvidence}
+                    />
                   </div>
                 )}
               </div>
@@ -280,6 +306,50 @@ export default function DecisionCard({
         ) : (
           <p>No reviews yet.</p>
         )}
+        <form
+          className="review-form conversation-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!pendingQuestion && question.trim()) save.mutate("question");
+          }}
+        >
+          <label>
+            {reviews.data?.some((review) => review.action === "question")
+              ? "Continue the conversation"
+              : "Your question"}
+            <textarea
+              required
+              maxLength={4000}
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder="Ask about this decision or its evidence…"
+              disabled={!!pendingQuestion}
+            />
+          </label>
+          <p className="muted">
+            Computed summaries and your conversation go to the configured model.
+            Keep raw data and secrets out of questions.
+          </p>
+          <div className="review-actions">
+            <button
+              className="primary"
+              disabled={
+                save.isPending ||
+                !!pendingQuestion ||
+                reviews.isLoading ||
+                answers.isLoading ||
+                !question.trim()
+              }
+            >
+              {pendingQuestion
+                ? "Waiting for an answer…"
+                : save.isPending
+                  ? "Sending…"
+                  : "Ask question"}
+            </button>
+          </div>
+          <ErrorNotice error={save.error} />
+        </form>
       </details>
     </section>
   );

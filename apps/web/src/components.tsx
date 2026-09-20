@@ -87,3 +87,31 @@ export function EvidenceDrawer({
     </div>
   );
 }
+
+export function EvidenceLinks({
+  ids,
+  showEvidence,
+}: {
+  ids: string[];
+  showEvidence: (id: string) => void;
+}) {
+  const unique = [...new Set(ids)];
+  if (!unique.length) return null;
+  return (
+    <span className="numbered-evidence">
+      Evidence{" "}
+      {unique.map((id, index) => (
+        <span key={id}>
+          {index > 0 && ", "}
+          <button
+            className="text-button"
+            aria-label={`Evidence ${index + 1}`}
+            onClick={() => showEvidence(id)}
+          >
+            {index + 1}
+          </button>
+        </span>
+      ))}
+    </span>
+  );
+}

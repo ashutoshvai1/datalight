@@ -1312,3 +1312,125 @@ footer span {
 .applied-rules li button { margin-left: 14px; }
 .setup-save { margin-top: 20px; font-size: 12px; }
 @media (max-width: 700px) { .channel-selection { grid-template-columns: 1fr; } }
+/* Demo report, history navigation and reference guide. */
+.numbered-evidence {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 3px;
+  font-size: 12px;
+}
+.numbered-evidence button {
+  text-decoration: underline;
+  padding: 4px 2px;
+}
+.correlation-key {
+  max-width: 600px;
+  margin: 0 auto 14px;
+}
+.correlation-gradient {
+  height: 12px;
+  border-radius: 3px;
+  background: linear-gradient(to right, #b47f61, #f1f0eb, #216e63);
+}
+.correlation-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+  font-size: 11px;
+}
+.correlation-labels span:nth-child(2) {
+  text-align: center;
+}
+.correlation-labels span:last-child {
+  text-align: right;
+}
+.history-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+.history-scroll {
+  overflow-x: scroll;
+  overflow-y: hidden;
+  height: 25px;
+  margin-top: 10px;
+  scrollbar-width: auto;
+  scrollbar-color: #709886 #eef3eb;
+}
+.history-scroll > div {
+  height: 1px;
+}
+.history-scroll::-webkit-scrollbar {
+  height: 14px;
+}
+.history-scroll::-webkit-scrollbar-track {
+  background: #eef3eb;
+  border-radius: 7px;
+}
+.history-scroll::-webkit-scrollbar-thumb {
+  background: #709886;
+  border: 3px solid #eef3eb;
+  border-radius: 7px;
+}
+.docs-links {
+  display: flex;
+  gap: 10px 20px;
+  flex-wrap: wrap;
+  margin-bottom: 25px;
+  font-size: 13px;
+}
+.docs-links a {
+  text-decoration: underline;
+}
+.docs-section {
+  scroll-margin-top: 20px;
+}
+.docs-section > p {
+  margin: 14px 0;
+  line-height: 1.8;
+  max-width: 950px;
+}
+.docs-table {
+  max-height: none;
+}
+.docs-table th[scope="row"] {
+  position: static;
+  min-width: 155px;
+  white-space: normal;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 12px;
+  color: #365048;
+}
+.docs-table td {
+  line-height: 1.75;
+}
+.docs-definitions {
+  margin: 12px 0;
+}
+.docs-definitions dt {
+  color: #365048;
+  font-size: 14px;
+  font-weight: 600;
+}
+.docs-definitions dd {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.8;
+  max-width: 950px;
+}
+@media (max-width: 550px) {
+  .correlation-labels {
+    font-size: 10px;
+  }
+  .history-controls {
+    align-items: flex-start;
+  }
+  .docs-table th[scope="row"] {
+    min-width: 110px;
+  }
+}

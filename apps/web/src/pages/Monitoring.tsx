@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pause, Play } from "lucide-react";
 import { api, number, type PageProps } from "../api";
@@ -7,24 +7,65 @@ import { Badge, Empty, ErrorNotice } from "../components";
 import { Chart } from "../Chart";
 import DecisionCard, { type BatchDecision } from "../DecisionCard";
 
+type TraceWindow = components["schemas"]["TraceView"] & {
+  start_batch: number;
+  end_batch: number;
+  latest_batch: number;
+  row_start: number;
+  row_end: number;
+};
+
 export default function Monitoring({ run, report, showEvidence }: PageProps) {
   const client = useQueryClient();
   const [selected, setSelected] = useState("");
-  const channel = selected || report?.profiles[0]?.id || "";
+  const [endBatch, setEndBatch] = useState<number | null>(null);
+  const scrollbar = useRef<HTMLDivElement>(null);
+  const excluded =
+    (run.config as typeof run.config & { excluded_channel_ids?: string[] })
+      .excluded_channel_ids ?? [];
+  const channels =
+    report?.profiles.filter((p) => !excluded.includes(p.id)) ?? [];
+  const channel =
+    channels.find((p) => p.id === selected)?.id || channels[0]?.id || "";
   const decisions = useQuery({
     queryKey: ["decisions", run.id, "recent"],
     queryFn: () => api<BatchDecision[]>(`/runs/${run.id}/decisions?limit=5`),
     refetchInterval: 2000,
   });
   const trace = useQuery({
-    queryKey: ["trace", run.id, channel],
+    queryKey: ["trace", run.id, channel, endBatch],
     queryFn: () =>
-      api<components["schemas"]["TraceView"]>(
-        `/runs/${run.id}/trace?channel_id=${channel}`,
+      api<TraceWindow>(
+        `/runs/${run.id}/trace?channel_id=${channel}&batch_window=3${endBatch === null ? "" : `&end_batch=${endBatch}`}`,
       ),
     enabled: !!channel,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === channel ? previous : undefined,
     refetchInterval: 2000,
   });
+  const latestBatch = Math.max(
+    trace.data?.latest_batch ?? 0,
+    run.batch_index - 1,
+    0,
+  );
+  const oldestEnd = Math.min(2, latestBatch);
+  const visibleEnd = endBatch ?? latestBatch;
+  useEffect(() => {
+    const element = scrollbar.current;
+    if (!element) return;
+    const update = () => {
+      const fraction =
+        latestBatch > oldestEnd
+          ? (visibleEnd - oldestEnd) / (latestBatch - oldestEnd)
+          : 1;
+      element.scrollLeft =
+        fraction * (element.scrollWidth - element.clientWidth);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [latestBatch, oldestEnd, visibleEnd]);
   const control = useMutation({
     mutationFn: () =>
       api(`/runs/${run.id}/control`, {
@@ -164,7 +205,11 @@ export default function Monitoring({ run, report, showEvidence }: PageProps) {
           <div>
             <h2>Incoming data</h2>
             <p>
-              Latest 1,000 samples · shaded intervals indicate detected changes.
+              {trace.data?.points.length
+                ? `Samples ${trace.data.row_start}–${trace.data.row_end} · `
+                : ""}
+              Current batch and up to two previous batches. Shading marks
+              detected changes.
             </p>
           </div>
           <select
@@ -172,7 +217,7 @@ export default function Monitoring({ run, report, showEvidence }: PageProps) {
             value={channel}
             onChange={(e) => setSelected(e.target.value)}
           >
-            {report?.profiles.map((p) => (
+            {channels.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
@@ -180,6 +225,53 @@ export default function Monitoring({ run, report, showEvidence }: PageProps) {
           </select>
         </div>
         <Chart option={option} label="Incoming channel values and forecast" />
+        <div className="history-controls">
+          <span className="muted">Scroll horizontally for earlier batches</span>
+          <button
+            disabled={endBatch === null}
+            onClick={() => setEndBatch(null)}
+          >
+            Latest
+          </button>
+        </div>
+        <div
+          className="history-scroll"
+          ref={scrollbar}
+          role="scrollbar"
+          aria-label="Monitoring history"
+          aria-orientation="horizontal"
+          aria-valuemin={oldestEnd}
+          aria-valuemax={latestBatch}
+          aria-valuenow={visibleEnd}
+          aria-valuetext={`Through batch ${visibleEnd}`}
+          tabIndex={0}
+          onKeyDown={(event) => {
+            let value = visibleEnd;
+            if (event.key === "ArrowLeft") value--;
+            else if (event.key === "ArrowRight") value++;
+            else if (event.key === "Home") value = oldestEnd;
+            else if (event.key === "End") value = latestBatch;
+            else return;
+            event.preventDefault();
+            value = Math.max(oldestEnd, Math.min(latestBatch, value));
+            setEndBatch(value === latestBatch ? null : value);
+          }}
+          onScroll={(event) => {
+            const element = event.currentTarget;
+            const span = element.scrollWidth - element.clientWidth;
+            if (span <= 0) return;
+            const value = Math.round(
+              oldestEnd +
+                (element.scrollLeft / span) * (latestBatch - oldestEnd),
+            );
+            if (value !== visibleEnd)
+              setEndBatch(value === latestBatch ? null : value);
+          }}
+        >
+          <div
+            style={{ width: `${Math.max(1, (latestBatch + 1) / 3) * 100}%` }}
+          />
+        </div>
       </section>
       <h2 className="section-title">Recent decisions</h2>
       {latest ? (

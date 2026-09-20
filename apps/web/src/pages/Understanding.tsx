@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { number, type PageProps } from "../api";
-import { Badge, Empty } from "../components";
+import { Badge, Empty, EvidenceLinks } from "../components";
 import { Chart } from "../Chart";
 import MonitoringSetup from "../MonitoringSetup";
 
@@ -32,12 +32,27 @@ export default function Understanding({ run, report, showEvidence }: PageProps) 
       (a, b) => Math.abs(b.coefficient ?? 0) - Math.abs(a.coefficient ?? 0),
     );
   const ids = report.profiles.map((p) => p.id);
-  const cells = report.correlations
-    .filter((c) => c.coefficient !== null)
-    .flatMap((c) => [
-      [ids.indexOf(c.left), ids.indexOf(c.right), c.coefficient],
-      [ids.indexOf(c.right), ids.indexOf(c.left), c.coefficient],
-    ]);
+  const pairs = new Map(
+    report.correlations.flatMap((c) => [
+      [`${c.left}:${c.right}`, c],
+      [`${c.right}:${c.left}`, c],
+    ]),
+  );
+  // Missing correlations get their own gray cells; they must not look like r = 0.
+  const cells = ids.flatMap((left, x) =>
+    ids.map((right, y) => {
+      const pair = pairs.get(`${left}:${right}`);
+      const coefficient = pair?.coefficient ?? null;
+      return {
+        value: [x, y, coefficient ?? 0],
+        itemStyle: coefficient === null ? { color: "#e2e5e1" } : undefined,
+        label:
+          coefficient === null
+            ? { show: true, formatter: "–", color: "#788078" }
+            : { show: false },
+      };
+    }),
+  );
   return (
     <>
       <div className="page-heading">
@@ -160,15 +175,10 @@ export default function Understanding({ run, report, showEvidence }: PageProps) 
             <p className="explanation">
               {explanation?.text ?? report.interpretation_message}
             </p>
-            {explanation?.evidence_ids.map((id) => (
-              <button
-                className="text-button"
-                key={id}
-                onClick={() => showEvidence(id)}
-              >
-                Supporting evidence
-              </button>
-            ))}
+            <EvidenceLinks
+              ids={explanation?.evidence_ids ?? []}
+              showEvidence={showEvidence}
+            />
             <h3>Strongest relationships</h3>
             {relationships
               .filter((c) => c.left === profile.id || c.right === profile.id)
@@ -205,25 +215,44 @@ export default function Understanding({ run, report, showEvidence }: PageProps) 
         </section>
       )}
       <section className="panel">
-        <details>
+        <details open>
           <summary>Full pairwise correlation matrix</summary>
           <Chart
             label="Channel correlation matrix"
             height={400}
             option={{
-              tooltip: { renderMode: "richText" },
-              grid: { top: 20, left: 70, bottom: 80, right: 20 },
+              tooltip: {
+                renderMode: "richText",
+                formatter: (params: unknown) => {
+                  const datum = params as { value: [number, number, number] };
+                  const [x, y] = datum.value;
+                  const pair = pairs.get(`${ids[x]}:${ids[y]}`);
+                  return `${names[ids[y]]} ↔ ${names[ids[x]]}\n${pair ? (pair.coefficient === null ? `Unavailable: ${pair.reason}` : `Correlation r = ${number(pair.coefficient, 3)} · ${pair.count} paired samples`) : "Same channel; no pairwise correlation computed."}`;
+                },
+              },
+              grid: { top: 20, left: 70, bottom: 55, right: 20 },
               xAxis: {
                 type: "category",
                 data: ids.map((id) => names[id]),
-                axisLabel: { hideOverlap: true },
+                axisLabel: {
+                  hideOverlap: true,
+                  width: 60,
+                  overflow: "truncate",
+                },
               },
               yAxis: {
                 type: "category",
                 data: ids.map((id) => names[id]),
-                axisLabel: { hideOverlap: true },
+                axisLabel: {
+                  hideOverlap: true,
+                  width: 60,
+                  overflow: "truncate",
+                },
               },
               visualMap: {
+                show: false,
+                hoverLink: false,
+                calculable: false,
                 min: -1,
                 max: 1,
                 orient: "horizontal",
@@ -234,6 +263,18 @@ export default function Understanding({ run, report, showEvidence }: PageProps) 
               series: [{ type: "heatmap", data: cells }],
             }}
           />
+          <div className="correlation-key" aria-label="Correlation color key">
+            <div className="correlation-gradient" />
+            <div className="correlation-labels">
+              <span>−1 · Opposite</span>
+              <span>0 · Little linear relationship</span>
+              <span>+1 · Together</span>
+            </div>
+          </div>
+          <p className="muted">
+            Hover a cell to see both channels. Gray cells have no computed
+            correlation. Color is a key, not a filter.
+          </p>
         </details>
       </section>
     </>
