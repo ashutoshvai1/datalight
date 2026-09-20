@@ -36,3 +36,7 @@ Implementation, integration and local deployment verification complete. The app 
 ## Remaining boundaries
 
 Uploads accept the existing UTF-8/header CSV format and bounded numeric discovery, with configurable 256 MiB default size and existing column/record limits. Rules support one scalar comparison, outside range or missing check; compound/temporal formulas remain unsupported. Model context includes ten prior completed turns, while older transcript pages remain available locally.
+
+## Follow-up: landing page and quickstart
+
+Owner: integration agent. Scope: App.tsx/sidebar styling, Makefile, README and developer guide. Keep the product tagline only in the sidebar with sentence line breaks. Add a single demo startup command with service-health waiting, prepared/synthetic selection, and a short setup-to-Play walkthrough. Acceptance: verified synthetic browser layout/workflow, make check, startup target, and refreshed local web deployment. Status: complete. `make check` passes (40 CPU tests); all three synthetic Docker browser workflows pass. The landing-page screenshot confirms the sidebar line breaks and single center heading. `make demo DOCKER='docker --context lima-docker'` successfully waits for health and updates localhost:8080. No persistence/schema changes; PostgreSQL tests were not repeated.

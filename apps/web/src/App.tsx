@@ -22,7 +22,7 @@ const canNavigate = () =>
   window.dispatchEvent(new Event("datalight:navigate", { cancelable: true }));
 
 const tagline =
-  "Illuminate your data. Talk to it. Evidence centric analysis. Your data stays private.";
+  "Illuminate your data.\nTalk to it.\nEvidence centric analysis.\nYour data stays private.";
 
 type Choice = components["schemas"]["SourceChoice"];
 type Preview = components["schemas"]["SourcePreview"];
@@ -88,7 +88,6 @@ function Setup({ done }: { done: (run: Run) => void }) {
       <div className="page-heading">
         <div>
           <span className="eyebrow">START AN ANALYSIS</span>
-          <p className="hero-tagline">{tagline}</p>
           <h1>Understand first. Monitor next.</h1>
         </div>
       </div>

@@ -6,26 +6,35 @@ Datalight is a local CSV data-understanding and monitoring application for the [
 
 The [Tennessee Eastman export](docs/DATASET.md) is the primary testbed. Its labels, channel identities, ranges and fault catalogue are offline context, never detector inputs or model knowledge. The product's source-convention portability limits remain explicit in the [roadmap](docs/roadmap.md).
 
-## Run it
+## Quickstart
 
-Requirements: Docker with Compose, approximately 4 GB available memory, and readable UTF-8 CSVs. A small synthetic fixture is included.
+You need Docker running with Compose, `make`, and about 4 GB of available memory. No Python, Node, data download, or model key is needed to try the included demo.
+
+**1. Start the app.** In the `datalight` repository folder, run:
 
 ```bash
-# Synthetic deployment; no download or model credentials required.
-DATA_DIR=./tests/fixtures docker compose up --build -d
+make demo
 ```
 
-Open **http://localhost:8080**. Nothing is analyzed automatically. Select a CSV from the mounted directory or upload a CSV, then choose initial samples, batch size, and seconds between batches. Defaults are **500 / 100 / 10 seconds**. Optional minimum/maximum channel limits are under a collapsed setup section. Custom paths must remain inside the data directory. Uploads are stored in a separate persistent local volume; the default upload limit is 256 MiB (`MAX_UPLOAD_BYTES`, default 268435456).
+The first build takes a few minutes. Wait for **Ready: http://localhost:8080**. This command uses prepared files in `runtime/demos` when available, or the included synthetic `demo.csv` otherwise. It preserves existing analyses, uploads, and model settings in `.env`.
 
-The understanding report opens after submission. Monitoring remains paused until **Play**. Pause/resume preserves the checkpoint; EOF completes playback. Before first Play, Understanding lets you exclude numeric channels and propose additional monitoring rules. The UI contains Understanding, Monitoring, Decision log, and Docs. Docs is available before starting an analysis. Historical reports and reviews remain accessible. Old foundation analyses are readable; start a new analysis to use the new detectors.
+**2. Load a demo.** Open [Datalight](http://localhost:8080), click **New analysis**, and select **demo abrupt** (or **demo** for the included synthetic file). Keep the defaults—**500** initial samples, **100** samples per batch, **10** seconds between batches—and click **Build understanding report**. For a faster presentation, change the interval to **1** second before building the report.
 
-The directory is mounted read-only. Files can be selected without restarting Docker. Source replacement requires a new analysis. `docker compose down` preserves database history.
+**3. Review and play.** Read Understanding. Optionally exclude channels and click **Save monitoring setup**. Open **Monitoring** and press **Play**. Inspect a flagged batch's evidence, then use **Decision log** to accept, question, or override it. **Docs** explains the metrics. Questions and natural-language rules need the [optional model setup](#optional-llm-synthesis-and-questions).
 
-## Three local demos
+To use your own file, choose **Upload CSV** instead of a demo. Use a UTF-8 CSV with a header row and numeric data (up to 256 MiB by default). Playback starts after the initial window; a shorter file can produce a report with no rows left to monitor.
+
+Run `make demo` again to restart or rebuild. Use `docker compose stop` to stop the app while keeping history. To choose another data directory, run `make demo DEMO_DIR=/path/to/csv-folder`. Mounted files remain read-only; uploads use a separate persistent local volume.
+
+If Docker cannot connect on this development Mac, use `make demo DOCKER='docker --context lima-docker'`. If port 8080 is busy, use `make demo WEB_PORT=8081`. For startup errors, run `docker compose logs --tail=50 api worker` (use the same Docker context as startup).
+
+## Prepare the three presentation demos (optional)
+
+If you have the Tennessee Eastman export and `uv`, prepare the files once, then follow the quickstart above:
 
 ```bash
 uv run --project backend python scripts/prepare_demo.py te_process.csv
-DATA_DIR=./runtime/demos docker compose up --build -d
+make demo
 ```
 
 The extractor streams the original export, evaluates test run 1 of all 20 faulty scenarios, and selects distinct examples of abrupt change, sustained drift, and broad multichannel change. Ties use the scenario number. Each output contains healthy test runs 1 and 2 followed by one complete faulty test run: **2,880 rows**, with unchanged observations, headers, and sample resets. With a 500-row reference, healthy monitoring precedes the faulted scenario.
@@ -50,9 +59,12 @@ The reference is provisional. A statistical change is not a fault diagnosis, and
 ## Optional LLM synthesis and questions
 
 ```bash
-cp .env.example .env
-# Set LLM_ENABLED=true and the organizer-provided LLM_API_KEY in .env.
+cp -n .env.example .env
+# Edit .env: set LLM_ENABLED=true and LLM_API_KEY to your provider key.
+make demo
 ```
+
+The copy command preserves an existing `.env`. Restarting with `make demo` loads the settings; start a new analysis for model-generated initial explanations.
 
 Provider settings remain backend-only. The default Norrin endpoint and exact configured model ID are in `.env.example`; compatible providers can be configured through `LLM_ENDPOINT`, `LLM_MODEL`, and `LLM_API_KEY`. A host-local compatible endpoint can use `host.docker.internal` where supported.
 

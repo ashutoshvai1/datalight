@@ -55,3 +55,7 @@ Browser uploads use file row order and keep raw observations local. Legacy mount
 Rule compilation sends only a sanitized explicit request and eligible opaque IDs. Deterministic comparisons, outside-range and missing-value checks produce separate typed evidence and a reviewed fault/quality effect; no model-generated code runs. Questions now include up to ten preceding completed exchanges scoped to the decision, with frozen per-job context and a complete local transcript. Reviews no longer require a name. See [architecture](../docs/architecture.md).
 
 Monitoring defaults to three actual batches and rereads older local windows on demand. A standalone Docs tab explains implemented metrics, detection criteria and evidence; no physical-fault catalogue is inferred from the demo.
+
+## D014 — Sidebar message and one-command demo
+
+The 2026-09-20 follow-up keeps the product tagline only in the sidebar, with one sentence per line; the setup heading remains “Understand first. Monitor next.”. `make demo` starts the local stack and waits for health, selecting prepared demos when present or the synthetic fixture otherwise. Dataset preparation and optional model configuration remain separate from the minimal quickstart.

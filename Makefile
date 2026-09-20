@@ -1,4 +1,5 @@
 SHELL := /bin/sh
+.DEFAULT_GOAL := install
 CSV_PATH ?= ./tests/fixtures/demo.csv
 DATABASE_URL ?= postgresql+psycopg://datalight:datalight@localhost:5433/datalight
 export DATABASE_URL
@@ -8,8 +9,16 @@ DATA_DIR ?= $(dir $(abspath $(CSV_PATH)))
 export DATA_DIR
 UV := uv run --project backend
 WEB := pnpm --dir apps/web
+DOCKER ?= docker
+DEMO_DIR ?= $(if $(wildcard runtime/demos/demo_abrupt.csv),./runtime/demos,./tests/fixtures)
+WEB_PORT ?= 8080
+export WEB_PORT
 
-.PHONY: install db migrate api worker web up down types lint typecheck test test-postgres test-browser docs check smoke-data smoke-restart
+.PHONY: demo install db migrate api worker web up down types lint typecheck test test-postgres test-browser docs check smoke-data smoke-restart
+demo:
+	@echo "Starting Datalight with CSVs from $(DEMO_DIR)"
+	DATA_DIR="$(DEMO_DIR)" $(DOCKER) compose up --build --wait
+	@echo "Ready: http://localhost:$(WEB_PORT) — choose New analysis to load a demo."
 install:
 	uv sync --project backend --frozen
 	$(WEB) install --frozen-lockfile
