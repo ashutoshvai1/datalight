@@ -1,8 +1,10 @@
-# Datalight
-
-**Illuminate your data. Talk to it. Evidence centric analysis. Your data stays private.**
+<p align="center">
+  <img src="docs/assets/datalight-submission-upload.jpg" alt="Datalight — Illuminate your data. Forest-green cover with illuminated data traces." width="720">
+</p>
 
 Datalight is a local CSV data-understanding and monitoring application for the [Norrin challenge](Norrin_Hackathon_Challenge_Sep_2026.pdf). Choose a file, build an initial understanding report, then press Play to replay the remaining observations in batches. Computed evidence and human reviews remain traceable.
+
+[Quickstart](#quickstart) · [Demo screenshots](#a-look-inside) · [Privacy](#privacy-and-optional-ai)
 
 The [Tennessee Eastman export](docs/DATASET.md) is the primary testbed. Its labels, channel identities, ranges and fault catalogue are offline context, never detector inputs or model knowledge. The product's source-convention portability limits remain explicit in the [roadmap](docs/roadmap.md).
 
