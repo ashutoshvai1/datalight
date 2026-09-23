@@ -79,3 +79,9 @@ Deterministic monitoring and human reviews work without a model. When enabled, A
 For native development, use Python 3.12, uv, Node 24 and pnpm 11.19.0. Locked dependencies are committed. The [development guide](docs/development.md) covers installation, separate services, `make check`, database/browser tests and API type generation.
 
 See [current state](devlog/current.md) for recorded verification, [architecture](docs/architecture.md) for implementation details, [decisions](devlog/decisions.md) for durable choices, and [roadmap](docs/roadmap.md) for coverage gaps and future work.
+
+## License
+
+Copyright 2026 Datalight contributors. Licensed under the [Apache License, Version 2.0](LICENSE).
+
+Third-party dependencies, datasets, and the Norrin challenge PDF retain their respective licenses and terms; they are not relicensed by this repository's license.

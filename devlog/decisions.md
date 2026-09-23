@@ -67,3 +67,7 @@ The approved evidence-v1 policy assigns Low/High evidence strength per automated
 ## D016 — Synthetic second-domain portability demonstration
 
 The approved [web-service demo](../docs/SECOND_DOMAIN_DEMO.md) uses a committed synthetic CSV and the existing upload flow. Its generator and scenario remain offline; production algorithms, prompts and schemas are unchanged. Baseline-only replay and renamed-header equivalence demonstrate detector portability independently of explicit operator rules. Evidence-backed discussion supports root-cause investigation without claiming causal identification or general detection accuracy.
+
+## D017 — Apache 2.0 licensing
+
+On 2026-09-23, the user selected Apache License 2.0 for Datalight. The root [LICENSE](../LICENSE) contains the official unmodified text, and backend/frontend package metadata use `Apache-2.0`. Third-party dependencies, datasets and challenge materials retain their own terms. See the [licensing workstream](workstreams/licensing.md).
